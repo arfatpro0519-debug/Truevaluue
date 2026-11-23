@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Truevalue — Mini App Telegram</title>
+<style>
+:root{--bg:#efeff4;--sec:#ffffff;--tx:#000;--hint:#7d8387;--link:#2481cc;--btn:#3390ec;--btntx:#fff;--sep:#e4e4e8;--ok:#1fa35b;--bad:#e5484d;--chip:#e3e5ea;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f0f10;--sec:#1c1c1e;--tx:#fff;--hint:#8e9297;--link:#6ab3f3;--btn:#3e88f7;--sep:#2c2c2f;--ok:#4cd388;--bad:#ff6b6f;--chip:#2a2a2d;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f0f10;--sec:#1c1c1e;--tx:#fff;--hint:#8e9297;--link:#6ab3f3;--btn:#3e88f7;--sep:#2c2c2f;--ok:#4cd388;--bad:#ff6b6f;--chip:#2a2a2d;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
+#app{max-width:520px;margin:0 auto;padding:12px 14px 96px;min-height:100vh}
+h1{font-size:26px;font-weight:700;margin:6px 4px 0;letter-spacing:-.01em}
+.sub{color:var(--hint);font-size:13.5px;margin:2px 4px 12px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:0;background:var(--chip);color:var(--tx);border-radius:16px;padding:7px 14px;font:500 14px inherit;font-family:inherit;cursor:pointer}
+.chip.on{background:var(--btn);color:var(--btnsx,#fff)}
+.cap{color:var(--hint);font-size:12.5px;text-transform:uppercase;letter-spacing:.03em;margin:16px 14px 6px}
+.list{background:var(--sec);border-radius:12px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:10px 14px;position:relative;cursor:pointer}
+.row+.row:before{content:"";position:absolute;top:0;left:68px;right:0;border-top:.5px solid var(--sep)}
+.av{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:700 14px ui-monospace,Menlo,monospace;color:#fff;background:conic-gradient(var(--ok) calc(var(--p)*1%),var(--chip) 0);position:relative}
+.av i{position:absolute;inset:3.5px;border-radius:50%;background:var(--sec)}.av b{position:relative;color:var(--tx);font-size:13px}
+.av.obs{background:var(--chip)}
+.mid{flex:1;min-width:0}.t{font-weight:600;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s{color:var(--hint);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.p{font-size:14px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.p em{font-style:normal;color:var(--link);font-weight:600}
+.r{text-align:right;flex:none}.r b{display:block;font-size:15px}.r span{font-size:12.5px;color:var(--ok);font-weight:600}
+.lk .mid .p,.lk .r{filter:blur(6px);user-select:none}.lk:after{content:"🔒";position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:18px}
+.cell{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;position:relative}
+.cell+.cell:before{content:"";position:absolute;top:0;left:14px;right:0;border-top:.5px solid var(--sep)}
+.cell span{color:var(--hint)}.cell b{font-weight:600}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.box{background:var(--sec);border-radius:12px;padding:12px 14px}.box b{display:block;font:700 22px ui-monospace,Menlo,monospace}.box span{font-size:12.5px;color:var(--hint)}
+.empty{text-align:center;padding:34px 20px;color:var(--hint);font-size:14px}.empty big{display:block;font-size:40px;margin-bottom:6px}
+.banner{display:flex;gap:12px;align-items:center;background:var(--btn);color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer}
+.banner b{display:block}.banner small{opacity:.85}.banner .go{margin-left:auto;background:#fff3;border-radius:14px;padding:5px 12px;font-weight:600;font-size:14px}
+.foot{color:var(--hint);font-size:12px;line-height:1.5;margin:18px 6px}
+.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sec);border-top:.5px solid var(--sep);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+.tabs div{display:flex;width:100%;max-width:520px}
+.tab{flex:1;border:0;background:none;color:var(--hint);padding:8px 0 7px;font:500 11px inherit;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+.tab i{font-style:normal;font-size:21px;filter:grayscale(1);opacity:.75}.tab.on{color:var(--btn)}.tab.on i{filter:none;opacity:1}
+.ov{position:fixed;inset:0;background:#0007;opacity:0;pointer-events:none;transition:opacity .2s;z-index:8}.ov.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--bg);border-radius:16px 16px 0 0;transform:translateY(105%);transition:transform .25s;z-index:9;padding:8px 14px calc(14px + env(safe-area-inset-bottom,0px));max-height:92vh;overflow:auto}
+.sheet.on{transform:none}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--hint);opacity:.4;margin:2px auto 12px}
+.star{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#6ab3f3,#3e88f7);display:grid;place-items:center;font-size:34px;margin:0 auto 8px}
+.sheet h2{text-align:center;font-size:22px;margin:0}.sheet .pr{text-align:center;color:var(--hint);margin:4px 0 14px;font-size:14px}.sheet .pr b{color:var(--tx);font-size:19px}
+.f{display:flex;gap:12px;padding:9px 14px;align-items:flex-start;font-size:14.5px}.f i{font-style:normal;font-size:20px}.f span{color:var(--hint);display:block;font-size:12.5px}
+.main{width:100%;border:0;background:var(--btn);color:#fff;border-radius:12px;padding:14px;font:600 16px inherit;font-family:inherit;margin-top:12px;cursor:pointer}
+.main:active,.chip:active,.banner:active{opacity:.75}
+.fine{text-align:center;color:var(--hint);font-size:11.5px;margin:10px 4px 0;line-height:1.45}
+#toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:#000c;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;z-index:20;display:none;max-width:88vw;text-align:center}
+
+.srch{display:flex;align-items:center;gap:8px;background:var(--chip);border-radius:12px;padding:9px 12px;margin:0 0 10px}.srch input{flex:1;border:0;background:none;outline:0;color:var(--tx);font:16px inherit;font-family:inherit;min-width:0}.srch input::placeholder{color:var(--hint)}
+.tm{flex:none;width:48px;text-align:center;font:600 14px ui-monospace,Menlo,monospace}.tm small{display:block;font:500 11px -apple-system,sans-serif;color:var(--hint);margin-top:1px}
+.od{font:12.5px ui-monospace,Menlo,monospace;color:var(--hint);margin-top:3px}.od b{color:var(--tx);font-weight:600}
+.more{width:100%;border:0;background:var(--sec);color:var(--link);border-radius:12px;padding:13px;font:600 15px inherit;font-family:inherit;margin-top:10px;cursor:pointer}
+.res{display:grid;grid-template-columns:repeat(4,1fr);text-align:center;padding:12px 6px}.res b{display:block;font:700 20px ui-monospace,Menlo,monospace}.res span{font-size:11.5px;color:var(--hint)}
+.res .g b{color:var(--ok)}.res .l b{color:var(--bad)}
+.note{padding:10px 14px;font-size:12.5px;color:var(--hint);border-top:.5px solid var(--sep)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="tabs"><div id="tabs"></div></div>
+<div class="ov" id="ov"></div>
+<div class="sheet" id="sh">
+<div class="grab"></div>
+<div class="star">📈</div>
+<h2>Truevalue Premium</h2>
+<div class="pr"><b>29,89 $</b> / mois · sans engagement</div>
+<div class="list">
+<div class="f"><i>📡</i><div>Tous les signaux en direct<span>Mise à jour en continu, 10 marchés Betfair</span></div></div>
+<div class="f"><i>🎯</i><div>Confiance, cote et valeur espérée<span>Le pari précis pour chaque signal</span></div></div>
+<div class="f"><i>🔀</i><div>Écarts Polymarket et argent frais<span>Recoupement multi-marchés</span></div></div>
+<div class="f"><i>🧾</i><div>Suivi quotidien public<span>Gagné, perdu, remboursé : rien n’est caché</span></div></div>
+</div>
+<button class="main" id="buy">S’abonner · 29,89 $ / mois</button>
+<div class="fine">Réservé aux majeurs. Les paris comportent un risque de perte ; aucun gain n’est garanti. Truevalue est un outil d’information, non affilié à Betfair ni Polymarket. Joueurs Info Service (France) : 09 74 75 13 13.</div>
+</div>
+<div id="toast"></div>
+<script>
+var DB={"M":[["Getafe — Atletico Madrid",0,22,"20:00",58.0,7.8,4.2,1.56],["Racing Santander — Real Sociedad",0,22,"15:15",34.0,3.4,4.2,2.08],["Bologna — Udinese",1,22,"14:00",45.0,1.82,3.95,5.0],["Lille — Bayern Munich",2,25,"20:00",58.0,5.6,4.6,1.63],["Barcelona — Villarreal",0,22,"13:00",86.0,1.21,9.0,15.0],["Paris St-G — Roma",2,25,"20:00",28.0,1.45,5.4,7.6],["RB Leipzig — Lens",2,24,"20:00",16.0,1.41,6.2,7.2],["Atletico Madrid — Viking",2,25,"20:00",13.0,1.14,12.0,23.0],["FC Sabah — Barcelona",2,25,"17:45",11.0,25.0,19.0,1.09],["Man City — Napoli",2,24,"20:00",11.0,1.31,6.8,10.5],["Athletico-PR — Remo",3,22,"19:00",9.4,1.58,4.4,6.8],["Paris FC — Angers",4,22,"14:00",8.8,1.34,6.0,10.5],["Hull — Brighton",5,22,"14:00",70.0,7.6,4.7,1.51],["Werder Bremen — Hamburger SV",6,22,"16:30",16.0,1.65,4.6,5.6],["Como — AEK Athens",2,24,"20:00",7.1,1.34,6.0,10.0],["Atalanta — Inter",1,22,"19:45",29.0,5.9,4.9,1.58],["Sassuolo — Genoa",1,22,"14:00",61.0,2.86,3.35,2.8],["Juventus — Venezia",1,22,"11:30",39.0,1.41,5.5,9.0],["Kaiserslautern — Dynamo Dresden",7,22,"12:30",5.0,2.18,3.85,3.45],["FC Twente — Willem II",8,22,"11:15",4.8,1.1,15.5,29.0],["Kasimpasa — Alanyaspor",9,22,"13:00",4.6,1.92,3.65,4.7],["Levante — Elche",0,23,"20:00",4.1,2.26,3.7,3.35],["Burgos — Albacete",10,22,"20:00",4.0,2.14,3.35,4.0],["Slavia Prague — Villarreal",2,25,"17:45",3.9,3.2,4.0,2.22],["Panathinaikos — OFI",11,22,"15:30",3.2,1.24,7.4,14.0],["Slovan Bratislava — Betis",2,24,"20:00",2.7,11.5,7.2,1.28],["Erzurum BB — Goztepe",9,22,"10:30",2.6,3.0,3.35,2.64],["SCR Altach — Sturm Graz",12,22,"13:30",2.4,3.9,3.85,2.04],["Cottbus — Hertha Berlin",7,22,"12:30",2.4,5.2,5.0,1.63],["PAOK — Kifisia",11,22,"17:30",2.1,1.38,5.4,9.6],["Anderlecht — Oud-Heverlee Leuven",13,22,"17:30",2.0,1.52,4.9,6.6],["Trabzonspor — Eyupspor",9,22,"16:00",1.9,1.14,10.5,23.0],["Kortrijk — Union St Gilloise",13,22,"15:00",1.8,8.8,5.4,1.39],["Nashville SC — FC Cincinnati",14,22,"21:00",1.7,1.52,5.1,6.2],["Sparta Rotterdam — AZ Alkmaar",8,22,"13:30",1.7,4.4,4.3,1.8],["Hacken — Elfsborg",15,22,"13:00",1.6,1.9,4.3,3.95],["SC Vianense — Rio Ave",16,22,"14:00",1.6,3.75,3.95,1.98],["Basaksehir — Corum Belediyespor",9,23,"17:00",1.5,1.91,4.0,4.1],["Karlsruhe — VfL Osnabruck",7,22,"12:30",1.4,2.5,3.8,2.92],["Ajax — ADO Den Haag",8,22,"13:30",1.5,1.2,9.0,14.0],["Galatasaray — Aston Villa",2,24,"17:45",2.9,2.72,4.1,2.48],["Osasuna — Malaga",0,22,"17:30",7.2,1.9,3.75,4.7],["Liverpool — Man Utd",5,22,"16:30",126.0,1.76,4.5,4.7],["Burnley — Blackburn",17,22,"12:00",13.0,1.97,3.85,4.1],["FC Zurich — St Gallen",18,22,"13:00",1.2,3.4,4.1,2.1],["Marseille — Le Mans",4,22,"19:45",4.1,1.49,5.1,7.2],["Brentford — Everton",5,23,"20:00",32.0,2.38,3.6,3.25],["Augsburg — Mainz",6,22,"14:30",15.0,2.84,4.0,2.46],["Go Ahead Eagles — Fortuna Sittard",8,22,"15:45",2.7,1.81,4.2,4.6],["AC Milan — Frosinone",1,22,"17:00",22.0,1.66,4.7,5.2],["AC Monza — Fiorentina",1,23,"19:45",3.9,3.95,4.0,2.0],["Man City (W) — Tottenham (W)",19,22,"12:00",1.2,1.45,5.6,6.6],["Hibernian — Dundee",20,24,"19:45",1.0,1.67,4.6,3.95],["St Louis City SC — Los Angeles FC",14,24,"01:00",1.0,2.42,3.9,2.94],["Konyaspor — Besiktas",9,22,"13:00",0.9,5.8,4.4,1.63],["Sporting Lisbon — Man Utd",2,25,"20:00",0.9,2.66,3.8,2.64],["Taichung Futuro FC — Hang Yuen FC",21,22,"07:30",0.8,4.0,3.85,1.9],["Seoul E-Land FC — Chungnam Asan",22,22,"07:30",0.8,1.89,4.1,4.0],["Waasland-Beveren — Gent",13,22,"12:30",0.8,3.95,3.75,2.02],["Sarpsborg — Lillestrom",23,22,"18:15",0.8,2.18,4.3,3.1],["Real Madrid — PSV",2,24,"20:00",0.7,1.2,9.4,13.5],["Guadalajara — Cruz Azul",24,22,"23:07",0.7,2.22,4.2,3.05],["Olympiakos — Iraklis",11,22,"17:00",0.7,1.19,8.0,20.0],["ASD Alcione — AC Ospitaletto",25,22,"13:30",0.7,2.96,3.5,2.52],["Austria Wien — Red Bull Salzburg",12,22,"16:00",0.7,4.6,4.5,1.75],["Inter — Stuttgart",2,25,"20:00",0.7,1.43,6.0,6.4],["Charlton (W) — Aston Villa (W)",19,22,"14:00",0.6,6.6,4.6,1.57],["Arsenal — Dortmund",2,24,"20:00",0.6,1.42,5.2,8.8],["Rangers — Aberdeen",20,24,"20:00",0.6,1.3,6.2,10.5],["Fluminense — Mirassol",3,22,"21:30",0.6,1.66,4.2,5.9],["AZ Picerno ASD — FC Giugliano",25,22,"16:30",0.5,2.12,3.55,3.7],["AD Ceuta FC — Almeria",10,23,"19:30",0.5,3.8,3.95,2.02],["UD Ourense — Racing de Ferrol",26,22,"11:00",0.5,5.2,3.6,1.83],["Pardubice — FC Zbrojovka Brno",27,22,"12:00",0.5,1.9,3.9,4.2],["Norwich — QPR",17,24,"19:45",0.5,2.1,3.9,3.65],["Chapecoense — SE Palmeiras",3,24,"21:00",0.5,3.6,4.4,1.83],["CSM Ramnicu-Valcea — Metalul Buzau",28,22,"10:30",0.5,3.1,3.85,2.18],["PFC Levski Sofia — Lokomotiv Sofia",29,22,"13:30",0.5,1.24,6.8,16.0],["Real Potosi — Bolivar",30,22,"19:00",0.4,5.3,4.3,1.52],["Kfum Oslo — Brann",23,22,"16:00",0.4,3.0,3.9,2.34],["Persib Bandung — Bali Utd Pusam",31,22,"12:00",0.4,1.62,4.5,5.3],["Sassari Torres — Spezia",25,22,"13:30",0.4,6.2,3.9,1.66],["Dinamo Zagreb — NK Istra",32,22,"14:00",0.4,1.24,7.4,12.0],["Arezzo — Padova",33,22,"16:15",0.4,2.44,3.25,3.35],["Rosario Central — Gimnasia Mendoza",34,22,"19:00",0.4,1.43,4.9,8.8],["Karmiotissa Polemidion — A.E.L.",35,22,"15:00",0.4,4.5,4.2,1.81],["Lausanne — FC Vaduz",18,22,"15:30",0.4,2.12,4.1,3.35],["Club Brugge — Liverpool",2,25,"20:00",0.4,4.6,4.8,1.67],["Atletico GO — Vila Nova",36,22,"21:30",0.4,2.1,3.35,4.2],["Dunajska Streda — KFC Komarno",37,22,"17:00",0.4,1.44,5.1,7.6],["Cordoba — Oviedo",10,22,"13:00",0.4,2.04,3.95,3.7],["Catania — SSD Bari",25,22,"14:00",0.3,1.99,3.6,4.1],["Kuala Lumpur — Pulau Pinang",38,22,"09:30",0.3,2.06,3.8,3.7],["Scafatese — Foggia",25,22,"11:30",0.3,2.58,3.55,2.82],["Sarajevo — Siroki Brijeg",39,22,"16:30",0.3,1.43,4.6,9.2],["Blackpool — Leicester",40,24,"19:45",0.3,4.2,4.4,1.82],["Levadiakos — Atromitos",11,22,"14:00",0.3,2.62,2.92,3.4],["Feyenoord — Porto",2,24,"20:00",0.3,2.78,3.8,2.5],["Odds BK — Bryne",41,22,"12:30",0.3,2.14,4.0,3.35],["Slovacko — Hradec Kralove",27,22,"14:00",0.3,2.88,3.45,2.64],["FC Nordsjaelland — FC Copenhagen",42,22,"17:00",0.3,2.56,3.6,2.88],["Pro Vercelli — Novara",25,22,"11:30",0.3,3.1,3.2,2.52],["GKS Katowice — Lech Poznan",43,22,"13:45",0.3,3.15,4.1,2.2],["Sparta Prague — Slovan Liberec",27,22,"17:00",0.3,1.73,4.1,5.2],["San Antonio Bulo Bulo — Always Ready",30,22,"23:30",0.2,5.5,5.1,1.51],["Calcio Avellino SSD — Mantova",33,22,"14:00",0.2,2.58,3.35,3.1],["Panaitolikos — NFC Volos",11,22,"15:00",0.2,2.36,3.3,3.5],["Sporting Cristal — Cienciano",44,22,"20:00",0.2,1.43,5.2,7.8],["Brommapojkarna — Halmstads",15,22,"15:30",0.2,2.14,3.9,3.4],["Sheff Utd — Southampton",17,24,"19:45",0.2,2.58,3.75,2.76],["Shatin SA — Eastern AA",45,22,"07:00",0.2,3.45,4.1,2.04],["Nantes — Grenoble",46,23,"19:45",0.2,1.47,4.4,7.0],["Rijeka — HNK Gorica",32,22,"17:00",0.2,1.37,5.2,10.0],["Red Bull Bragantino — Vasco Da Gama",3,22,"22:30",0.2,2.74,3.65,2.68],["Molynes United FC — Tivoli Gardens",47,22,"20:00",0.2,2.7,3.85,2.26],["Chicago Fire — Charlotte FC",14,22,"23:30",0.2,1.65,4.7,5.0],["Arges Pitesti — FCSB",48,22,"18:30",0.2,4.2,3.55,1.99],["River Plate — Lanus",34,22,"22:00",0.2,1.7,3.75,6.2],["US Pianese — Gubbio",25,22,"13:30",0.2,1.9,3.65,4.4],["El Gounah — Zamalek",49,23,"15:00",0.2,5.0,3.25,1.86],["Viborg — Randers",42,22,"13:00",0.1,1.59,4.7,5.7],["Colo Colo — Univ Catolica (Chile)",50,22,"21:00",0.1,2.32,3.9,3.05],["Dynamo Kiev — Obolon-Brovar Kiev",51,22,"11:00",0.1,1.26,6.2,12.5],["Vancouver Whitecaps — Real Salt Lake",14,23,"01:30",0.1,1.53,5.1,5.9],["Birmingham (W) — Man Utd (W)",19,22,"12:00",0.1,5.8,4.7,1.56],["Slaven Belupo — Osijek",32,23,"17:00",0.1,2.52,3.75,2.7],["Bregalnica Stip — FK Struga Trim-Lum",52,22,"11:00",0.1,4.2,3.8,1.81],["Hammarby — IFK Goteborg",15,23,"18:00",0.1,1.24,7.0,13.5],["Hougang Utd — Tampines Rovers",53,22,"11:30",0.1,7.6,5.7,1.39],["Rakow Czestochowa — Widzew Lodz",43,22,"11:15",0.1,2.06,3.8,3.7],["UTA Arad — Universitatea Craiova",48,22,"15:30",0.1,5.1,3.8,1.8],["Sporting Gijon — Las Palmas",10,22,"15:15",0.1,2.2,3.5,3.65],["Arsenal (W) — West Ham United (W)",19,22,"14:30",0.1,1.17,9.4,16.0],["Macva Sabac — Vojvodina",54,22,"16:00",0.1,6.8,4.4,1.54],["FC Kosice — MFk Skalica",37,22,"14:30",0.1,1.54,4.7,6.2],["Queretaro — Necaxa",24,23,"01:10",0.1,2.16,3.85,3.4],["Club 2 de Mayo de Pedro Ju — Sportivo San Lorenzo",55,23,"21:00",0.1,1.68,3.8,5.2],["Farense — Fatima",16,22,"15:00",0.1,1.26,6.0,15.0],["Sport Huancayo — Universitario de Deportes",44,22,"20:00",0.1,2.12,3.7,3.45],["AC Horsens — Silkeborg",42,22,"13:00",0.1,2.38,3.65,3.1],["Persikad Depok — Bekasi City",56,22,"12:00",0.1,2.16,3.4,2.86],["Alashkert — FC Noah",57,22,"16:00",0.1,5.0,3.75,1.72],["Huachipato — Deportes Concepcion",50,22,"15:00",0.1,2.7,3.45,2.82],["Sanjoanense — Academica",16,22,"11:00",0.1,5.3,4.4,1.63],["Zizkov — SFC Opava",58,22,"09:15",0.1,2.7,3.75,2.6],["Botev Vratsa — CSKA 1948 Sofia",29,22,"11:00",0.3,4.4,3.75,1.89],["Sirius — Djurgardens",15,22,"13:00",0.2,2.48,3.65,2.98],["Lorient — Rennes",4,22,"16:15",6.2,3.1,3.5,2.52]],"L":["Spanish La Liga","Italian Serie A","UEFA Champions League","Brazilian Serie A","French Ligue 1","English Premier League","German Bundesliga","German Bundesliga 2","Dutch Eredivisie","Turkish Super League","Spanish Segunda Division","Greek Super League","Austrian Bundesliga","Belgian Pro League","US MLS","Swedish Allsvenskan","Portuguese Cup","English Sky Bet Championship","Swiss Super League","English WSL","Scottish Premiership","Taiwanese Football Premier League","South Korean K2 League","Norwegian Eliteserien","Mexican Liga MX","Italian Serie C","Spanish Primera Federación - Group 1","Czech 1 Liga","Romanian Liga II","Bulgarian A League","Bolivian Liga de Futbol Profesional","Indonesian Super League","Croatian HNL","Italian Serie B","Argentinian Primera Division","Cypriot 1st Division","Brazilian Serie B","Slovakian Super League","Malaysian Super League","Bosnian Premier League","English Sky Bet League 1","Norwegian 1st Division","Danish Superliga","Polish Ekstraklasa","Peruvian Primera Division","Hong Kong Premier League","French Ligue 2","Jamaican Premier League","Romanian Liga I","Egyptian Premier","Chilean Primera Division","Ukrainian Premier League","Republic of North Macedonian Soccer","Singapore Premier League","Serbian Super League","Paraguayan Primera Division","Indonesian Championship","Armenian Premier League","Czech 2 Liga"]};
+var M=DB.M,LG=DB.L;
+var D=[
+{m:"Osasuna — Malaga",l:"La Liga · 17:30 · £12k",pk:"Moins de 2.5",o:"1.87",c:97,ev:"+81,8 %",k:["bet","fresh"],n:"Argent frais · PM −0,6 pt"},
+{m:"Hacken — Elfsborg",l:"Allsvenskan · 13:00 · £7,8k",pk:"Plus de 2.5",o:"1.59",c:97,ev:"+52,0 %",k:["bet"],n:"Confirmé Polymarket"},
+{m:"Juventus — Venezia",l:"Serie A · 11:30 · £53k",pk:"Plus de 2.5",o:"1.61",c:94,ev:"+36,0 %",k:["bet","fresh"],n:"Argent frais 1 h"},
+{m:"Go Ahead Eagles — Fortuna Sittard",l:"Eredivisie · 15:45 · £4,5k",pk:"Plus de 2.5",o:"1.64",c:90,ev:"+31,9 %",k:["bet"],n:"Confirmé Polymarket"},
+{m:"Hull — Brighton",l:"Premier League · 14:00 · £89k",pk:"Observation",o:"",c:45,ev:"",k:["obs"],n:"Divergence détectée"},
+{m:"Atalanta — Inter",l:"Serie A · 19:45 · £36k",pk:"Observation",o:"",c:45,ev:"",k:["obs"],n:"Divergence détectée"},
+{m:"Sassuolo — Genoa",l:"Serie A · 14:00 · £65k",pk:"Observation",o:"",c:45,ev:"",k:["obs","fresh"],n:"Argent frais 1 h"}];
+var F={all:"Tous",bet:"Paris",obs:"Observation",fresh:"Argent frais"};
+var DN={22:"dim. 22 nov.",23:"lun. 23 nov.",24:"mar. 24 nov.",25:"mer. 25 nov."};
+var st={tab:"home",f:"all",q:"",s:"vol",n:25},tg=window.Telegram&&window.Telegram.WebApp;
+if(tg){try{tg.ready();tg.expand();var tp=tg.themeParams||{},r=document.documentElement.style;
+if(tp.bg_color){r.setProperty("--bg",tp.secondary_bg_color||tp.bg_color);r.setProperty("--sec",tp.bg_color);r.setProperty("--tx",tp.text_color);r.setProperty("--hint",tp.hint_color);r.setProperty("--link",tp.link_color);r.setProperty("--btn",tp.button_color)}}catch(e){}}
+function $(i){return document.getElementById(i)}
+function hap(){try{tg&&tg.HapticFeedback.impactOccurred("light")}catch(e){}}
+function toast(t){var e=$("toast");e.textContent=t;e.style.display="block";setTimeout(function(){e.style.display="none"},3000)}
+function sheet(on){$("ov").classList.toggle("on",on);$("sh").classList.toggle("on",on);if(on)hap()}
+function fv(v){return v>=1000?(v/1000).toFixed(2).replace(".",",")+" M":v>=1?(v%1?v.toFixed(1).replace(".",","):v)+"k":Math.round(v*1000)}
+function mrow(m){return '<div class="row"><div class="tm">'+m[3]+'<small>'+(m[2]==22?"auj.":DN[m[2]].slice(0,3)+" "+m[2])+'</small></div><div class="mid"><div class="t">'+m[0]+'</div><div class="s">'+LG[m[1]]+' · £'+fv(m[4])+'</div><div class="od">1 <b>'+m[5]+'</b> · N <b>'+m[6]+'</b> · 2 <b>'+m[7]+'</b></div></div></div>'}
+function row(d,i){var lock=i>=2,obs=d.k.indexOf("obs")>-1;
+return '<div class="row'+(lock?' lk':'')+'" data-i="'+i+'"><div class="av'+(obs?' obs':'')+'" style="--p:'+d.c+'"><i></i><b>'+d.c+'</b></div><div class="mid"><div class="t">'+d.m+'</div><div class="s">'+d.l+'</div><div class="p"><em>'+d.pk+(d.o?' @'+d.o:'')+'</em> · '+d.n+'</div></div>'+(d.ev?'<div class="r"><b>EV</b><span>'+d.ev+'</span></div>':'')+'</div>'}
+function matches(){var q=st.q.toLowerCase();
+var L=M.filter(function(m){return !q||(m[0]+" "+LG[m[1]]).toLowerCase().indexOf(q)>-1});
+L=L.slice().sort(st.s=="vol"?function(a,b){return b[4]-a[4]}:function(a,b){return a[2]-b[2]||(a[3]<b[3]?-1:a[3]>b[3]?1:0)});
+var sh=L.slice(0,st.n);
+return '<div class="list" id="ml">'+(sh.length?sh.map(mrow).join(""):'<div class="empty">Aucun match trouvé</div>')+'</div>'+(L.length>st.n?'<button class="more" data-more="1">Afficher plus ('+(L.length-st.n)+')</button>':'')}
+function view(){var h="";
+if(st.tab=="home"){
+h='<h1>Truevalue</h1><div class="sub">Betfair en direct · 223 rencontres suivies · 10 marchés · £1,29 M de volume</div>'+
+'<div class="cap" style="margin-top:6px">Résultats des signaux</div><div class="list"><div class="res"><div class="g"><b>0</b><span>Gagnés</span></div><div class="l"><b>0</b><span>Perdus</span></div><div><b>0</b><span>Remboursés</span></div><div><b>0</b><span>Annulés</span></div></div>'+
+'<div class="cell"><span>Résultat du jour</span><b>0,00 pt</b></div><div class="cell"><span>Réussite du jour</span><b>—</b></div><div class="cell"><span>Portefeuille global</span><b>10,00 pts</b></div>'+
+'<div class="note">Signaux à confiance élevée (cote ≥ 1,30), 1 pt par position. Historique en cours de constitution, scores finaux ESPN + SportScore.</div></div>'+
+'<div class="cap">Matchs enregistrés · '+M.length+' avec cotes 1X2</div>'+
+'<div class="srch">🔍<input id="q" placeholder="Équipe ou championnat" value="'+st.q.replace(/"/g,"")+'"></div>'+
+'<div class="chips"><button class="chip'+(st.s=="vol"?' on':'')+'" data-s="vol">Volume</button><button class="chip'+(st.s=="time"?' on':'')+'" data-s="time">Heure</button></div><div id="mw">'+matches()+'</div>'}
+if(st.tab=="sig"){
+var L=D.filter(function(d){return st.f=="all"||d.k.indexOf(st.f)>-1});
+h='<h1>Signaux</h1><div class="sub">22 signaux · mis à jour il y a 18 min</div>'+
+'<div class="banner" data-b="1"><span style="font-size:26px">⭐</span><div><b>Débloquez tous les signaux</b><small>Premium · 29,89 $ / mois</small></div><span class="go">Voir</span></div>'+
+'<div class="chips">'+Object.keys(F).map(function(k){return '<button class="chip'+(st.f==k?' on':'')+'" data-f="'+k+'">'+F[k]+'</button>'}).join("")+'</div>'+
+'<div class="list">'+(L.length?L.map(function(d){return row(d,D.indexOf(d))}).join(""):'<div class="empty">Aucun signal</div>')+'</div>'+
+'<div class="cap">+ 15 autres signaux</div><div class="list"><div class="row lk" data-b="1"><div class="av obs"><i></i><b>🔒</b></div><div class="mid"><div class="t">Réservé aux abonnés</div><div class="s">Débloquez la liste complète</div></div></div></div>'}
+if(st.tab=="pro"){
+h='<h1>Compte</h1><div class="sub">Vous utilisez la version gratuite</div><div class="banner" data-b="1"><span style="font-size:26px">⭐</span><div><b>Truevalue Premium</b><small>29,89 $ / mois · sans engagement</small></div><span class="go">S’abonner</span></div><div class="list"><div class="cell"><span>Statut</span><b>Gratuit</b></div><div class="cell"><span>Matchs et résultats</span><b>✓</b></div><div class="cell"><span>Signaux détaillés</span><b>🔒</b></div></div>'}
+h+='<div class="foot">Réservé aux majeurs. Les paris comportent un risque de perte, aucun gain n’est garanti. Truevalue n’est pas affilié à Betfair ni Polymarket.</div>';
+$("app").innerHTML=h;
+var T=[["home","📊","Matchs"],["sig","📡","Signaux"],["pro","⭐","Compte"]];
+$("tabs").innerHTML=T.map(function(t){return '<button class="tab'+(st.tab==t[0]?' on':'')+'" data-t="'+t[0]+'"><i>'+t[1]+'</i>'+t[2]+'</button>'}).join("");
+var q=$("q");if(q)q.addEventListener("input",function(){st.q=q.value;st.n=25;$("mw").innerHTML=matches()})}
+document.addEventListener("click",function(e){var x=e.target.closest("[data-t],[data-f],[data-b],[data-i],[data-s],[data-more]");
+if(e.target==$("ov")){sheet(false);return}
+if(!x)return;
+if(x.dataset.t){st.tab=x.dataset.t;hap();view();window.scrollTo(0,0)}
+else if(x.dataset.f){st.f=x.dataset.f;hap();view()}
+else if(x.dataset.s){st.s=x.dataset.s;st.n=25;hap();view()}
+else if(x.dataset.more){st.n+=25;$("mw").innerHTML=matches()}
+else if(x.dataset.b||(x.dataset.i&&+x.dataset.i>=2)){sheet(true)}});
+$("buy").addEventListener("click",function(){hap();toast("Démo : le paiement (Telegram Stars) sera branché ici.")});
+view();
+</script>
+</body>
+</html>
