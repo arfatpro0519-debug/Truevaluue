@@ -9,6 +9,7 @@ import { CalibrationStore } from '../src/calibration.js';
 import { DEFAULT_CALIBRATION_MIN_N, loadConfig } from '../src/config.js';
 import { ALL_72_SIGNATURES, buildConfigurationsFromData } from '../src/configurations.js';
 import { MarketKey } from '../src/market.js';
+import { SubscriptionStore } from '../src/subscriptions.js';
 
 function withStore(observations, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-phase1-'));
@@ -176,6 +177,23 @@ test('1.5 une erreur de persistance est remontée dans getPersistenceStatus', ()
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('1.7 réglages et abonnements délégués sans changer le comportement', () => {
+  withStore([], (store) => {
+    assert.ok(store.subscriptions instanceof SubscriptionStore);
+    assert.equal(store.setSetting('cle', 'valeur'), true);
+    assert.equal(store.getSetting('cle'), 'valeur');
+    assert.equal(store.claimSettingOnce('admin_passcode_hash', 'hash1'), true);
+    assert.equal(store.claimSettingOnce('admin_passcode_hash', 'hash2'), false);
+    assert.equal(store.getSetting('admin_passcode_hash'), 'hash1');
+    const sub = store.upsertSubscription({ telegramUserId: '7', chargeId: 'ch1' });
+    assert.equal(sub.charge_id, 'ch1');
+    assert.equal(sub.active, true);
+    const again = store.upsertSubscription({ telegramUserId: '7', chargeId: null });
+    assert.equal(again.charge_id, 'ch1');
+    store.close();
+  });
 });
 
 test('1.6 la signature du signal est attachée à l’observation', () => {
