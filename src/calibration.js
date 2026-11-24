@@ -1,8 +1,8 @@
 // Journal d'observations pré-match et calibration empirique via ESPN et SportScore.
 
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { mapWithConcurrency } from './async.js';
 import { formatDate, parseKickoff } from './enrich.js';
@@ -14,6 +14,18 @@ import { competitionSlugs, findSportScoreMatch } from './sportscore.js';
 const MAX_OBSERVATIONS = 50_000;
 const SETTLE_GRACE_MS = 125 * 60 * 1000;
 const PROB_EPS = 1e-4;
+
+// `node:sqlite` n'existe qu'à partir de Node 22.5 (et demande un flag avant 22.13).
+// On le charge donc à l'exécution : sans lui, le stockage bascule en JSON.
+const requireModule = createRequire(import.meta.url);
+function loadDatabaseSync() {
+  try {
+    return requireModule('node:sqlite').DatabaseSync || null;
+  } catch {
+    return null;
+  }
+}
+const DatabaseSync = loadDatabaseSync();
 
 function clampProb(p) {
   return Math.min(1 - PROB_EPS, Math.max(PROB_EPS, p));
@@ -861,10 +873,13 @@ export class CalibrationStore {
   constructor(filePath = path.resolve(process.cwd(), 'data', 'observations.json')) {
     this.filePath = filePath;
     this.signalFilePath = path.join(path.dirname(filePath), 'signal_history.json');
+    this.metaFilePath = path.join(path.dirname(filePath), 'store-meta.json');
     this.dbPath = filePath.endsWith('.db')
       ? filePath
       : path.join(path.dirname(filePath), 'truevalue.db');
     this.db = this._openDb();
+    this.storageMode = this.db ? 'sqlite' : 'json';
+    this._metaCache = null;
     this._settleInFlight = null;
     this.observations = this._load();
     this.signalRecords = this._loadSignals();
@@ -872,6 +887,7 @@ export class CalibrationStore {
   }
 
   _openDb() {
+    if (!DatabaseSync) return null;
     try {
       const dir = path.dirname(this.dbPath);
       fs.mkdirSync(dir, { recursive: true });
@@ -913,9 +929,43 @@ export class CalibrationStore {
         );
       `);
       return db;
-    } catch {
+    } catch (err) {
+      console.error('SQLite indisponible, repli JSON :', err?.message || err);
       return null;
     }
+  }
+
+  _writeJson(targetPath, value) {
+    try {
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+      return true;
+    } catch (err) {
+      console.error('Écriture JSON impossible:', err?.message || err);
+      return false;
+    }
+  }
+
+  _readMeta() {
+    if (this._metaCache) return this._metaCache;
+    let meta = null;
+    try {
+      if (fs.existsSync(this.metaFilePath)) {
+        meta = JSON.parse(fs.readFileSync(this.metaFilePath, 'utf8'));
+      }
+    } catch (err) {
+      console.error('Lecture du stockage JSON impossible:', err?.message || err);
+    }
+    this._metaCache = {
+      settings: meta?.settings && typeof meta.settings === 'object' ? meta.settings : {},
+      subscriptions:
+        meta?.subscriptions && typeof meta.subscriptions === 'object' ? meta.subscriptions : {},
+    };
+    return this._metaCache;
+  }
+
+  _writeMeta() {
+    return this._writeJson(this.metaFilePath, this._readMeta());
   }
 
   _readLegacyJson(targetPath) {
@@ -960,7 +1010,10 @@ export class CalibrationStore {
   }
 
   _save() {
-    if (!this.db) return;
+    if (!this.db) {
+      this._writeJson(this.filePath, this.observations);
+      return;
+    }
     try {
       this.db.exec('BEGIN IMMEDIATE');
       this.db.exec('DELETE FROM observations');
@@ -1020,7 +1073,10 @@ export class CalibrationStore {
   }
 
   _saveSignals() {
-    if (!this.db) return;
+    if (!this.db) {
+      this._writeJson(this.signalFilePath, this.signalRecords);
+      return;
+    }
     try {
       this.db.exec('BEGIN IMMEDIATE');
       this.db.exec('DELETE FROM signal_records');
@@ -1047,7 +1103,11 @@ export class CalibrationStore {
   }
 
   getSetting(key) {
-    if (!this.db || !key) return null;
+    if (!key) return null;
+    if (!this.db) {
+      const value = this._readMeta().settings[String(key)];
+      return value === undefined ? null : value;
+    }
     try {
       const row = this.db
         .prepare('SELECT value FROM app_settings WHERE key = ?')
@@ -1059,7 +1119,11 @@ export class CalibrationStore {
   }
 
   setSetting(key, value) {
-    if (!this.db || !key) return false;
+    if (!key) return false;
+    if (!this.db) {
+      this._readMeta().settings[String(key)] = String(value);
+      return this._writeMeta();
+    }
     try {
       this.db
         .prepare(
@@ -1073,7 +1137,14 @@ export class CalibrationStore {
   }
 
   claimSettingOnce(key, value) {
-    if (!this.db || !key) return false;
+    if (!key) return false;
+    if (!this.db) {
+      const store = this._readMeta().settings;
+      const id = String(key);
+      if (Object.prototype.hasOwnProperty.call(store, id)) return false;
+      store[id] = String(value);
+      return this._writeMeta();
+    }
     try {
       const res = this.db
         .prepare(
@@ -1087,7 +1158,15 @@ export class CalibrationStore {
   }
 
   getSubscription(telegramUserId) {
-    if (!this.db || !telegramUserId) return null;
+    if (!telegramUserId) return null;
+    if (!this.db) {
+      const row = this._readMeta().subscriptions[String(telegramUserId)];
+      if (!row) return null;
+      const active =
+        row.status === 'active' &&
+        (!row.expires_at || Date.parse(row.expires_at) > Date.now());
+      return { ...row, active };
+    }
     try {
       const row = this.db
         .prepare(
@@ -1111,8 +1190,23 @@ export class CalibrationStore {
     expiresAt = null,
     chargeId = null,
   }) {
-    if (!this.db || !telegramUserId) return null;
+    if (!telegramUserId) return null;
     const nowIso = new Date().toISOString();
+    if (!this.db) {
+      const store = this._readMeta().subscriptions;
+      const id = String(telegramUserId);
+      const previous = store[id] || {};
+      store[id] = {
+        telegram_user_id: id,
+        status: String(status),
+        plan: plan ? String(plan) : null,
+        expires_at: expiresAt ? String(expiresAt) : null,
+        charge_id: chargeId ? String(chargeId) : previous.charge_id || null,
+        updated_at: nowIso,
+      };
+      if (!this._writeMeta()) return null;
+      return this.getSubscription(id);
+    }
     this.db
       .prepare(
         `INSERT INTO subscriptions (telegram_user_id, status, plan, expires_at, charge_id, updated_at)

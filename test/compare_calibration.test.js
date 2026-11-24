@@ -244,7 +244,11 @@ test('CalibrationStore records pre-kickoff only, settles via ESPN/SportScore, an
     const rec = store.recordFromComparison(rows, nowMs);
     assert.equal(rec.added, 1);
     assert.equal(rec.total, 1);
-    assert.ok(fs.existsSync(store.dbPath));
+    assert.ok(
+      store.storageMode === 'sqlite'
+        ? fs.existsSync(store.dbPath)
+        : fs.existsSync(store.filePath)
+    );
 
     const espnMock = {
       many: async () => ({
@@ -2162,6 +2166,7 @@ test('Server-side Pro redaction, admin claim/login/pro-preview, Telegram initDat
     polymarketEnabled: true,
     espnEnabled: true,
     sportscoreDisabled: true,
+    paymentsEnabled: true,
     telegramBotToken: botToken,
     telegramWebhookSecret: webhookSecret,
     telegramProStarsPrice: 1500,

@@ -1140,6 +1140,9 @@ export async function startServer(
     cfgOrSources && cfgOrSources.scraper && cfgOrSources.polymarket
       ? cfgOrSources
       : createSources(cfgOrSources || loadConfig());
+  if (IS_PROD && !sources.cfg?.adminPasscode) {
+    throw new Error('ADMIN_PASSCODE doit être défini pour démarrer en production.');
+  }
   const app = createApp(sources);
   const listenPort = port ?? sources.cfg?.port ?? 3000;
 
