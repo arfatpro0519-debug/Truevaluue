@@ -1058,6 +1058,14 @@ export class CalibrationStore {
         obs.last_pre_kickoff_sides = null;
         changed = true;
       }
+      if (obs.signature_code === undefined) {
+        obs.signature_code = null;
+        changed = true;
+      }
+      if (obs.signature_complete === undefined) {
+        obs.signature_complete = null;
+        changed = true;
+      }
     }
     if (changed) this._save();
   }
@@ -1370,6 +1378,7 @@ export class CalibrationStore {
           total_volume_bf: obs.bf_volume || 0,
           pm_liquidity: obs.pm_liquidity ?? null,
           signature_code: null,
+          signature_complete: null,
           pm_signature_code: null,
           pm_url: null,
           status: obs.status || 'pending',
@@ -1408,6 +1417,26 @@ export class CalibrationStore {
         .sort((a, b) => String(b.captured_at || '').localeCompare(String(a.captured_at || '')))
         .slice(0, MAX_OBSERVATIONS);
     }
+  }
+
+  _attachSignaturesToObservations() {
+    const byFixture = new Map(this.signalRecords.map((r) => [r.fixture_key, r]));
+    let changed = false;
+    for (const obs of this.observations) {
+      const sig = byFixture.get(obs.fixture_key);
+      if (!sig) continue;
+      const code = sig.signature_code ?? obs.signature_code ?? null;
+      const complete =
+        typeof sig.signature_complete === 'boolean'
+          ? sig.signature_complete
+          : obs.signature_complete ?? null;
+      if (obs.signature_code !== code || obs.signature_complete !== complete) {
+        obs.signature_code = code;
+        obs.signature_complete = complete;
+        changed = true;
+      }
+    }
+    if (changed) this._save();
   }
 
   recordFromComparison(comparisonRows, nowMs = Date.now()) {
@@ -1481,6 +1510,8 @@ export class CalibrationStore {
           // `sides` reste le prix vu à l'apparition du signal : c'est celui que
           // l'utilisateur aurait pu saisir, et sert au backtest.
           first_seen: existing?.first_seen || seenAt,
+          signature_code: existing?.signature_code ?? null,
+          signature_complete: existing?.signature_complete ?? null,
           sides: existing?.sides || snapshot,
           last_pre_kickoff: seenAt,
           last_pre_kickoff_sides: snapshot,
@@ -1590,6 +1621,10 @@ export class CalibrationStore {
         total_volume_bf: Math.max(meta.total_volume_bf || 0, existing?.total_volume_bf || 0),
         pm_liquidity: meta.pm_liquidity ?? existing?.pm_liquidity ?? null,
         signature_code: meta.signature_code || existing?.signature_code || null,
+        signature_complete:
+          typeof meta.signature_complete === 'boolean'
+            ? meta.signature_complete
+            : existing?.signature_complete ?? null,
         pm_signature_code: meta.pm_signature_code || existing?.pm_signature_code || null,
         pm_url: meta.pm_url || existing?.pm_url || null,
         status: 'pending',
@@ -1608,6 +1643,7 @@ export class CalibrationStore {
         .sort((a, b) => String(b.captured_at || '').localeCompare(String(a.captured_at || '')))
         .slice(0, MAX_OBSERVATIONS);
       this._saveSignals();
+      this._attachSignaturesToObservations();
     }
     return { added, updated, total: this.signalRecords.length };
   }

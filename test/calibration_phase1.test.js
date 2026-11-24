@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import { CalibrationStore } from '../src/calibration.js';
 import { DEFAULT_CALIBRATION_MIN_N, loadConfig } from '../src/config.js';
+import { ALL_72_SIGNATURES, buildConfigurationsFromData } from '../src/configurations.js';
 import { MarketKey } from '../src/market.js';
 
 function withStore(observations, fn) {
@@ -177,6 +178,51 @@ test('1.5 une erreur de persistance est remontée dans getPersistenceStatus', ()
   }
 });
 
+test('1.6 la signature du signal est attachée à l’observation', () => {
+  const obs = observation('match_sig', { score: [2, 0], odds: 2 });
+  delete obs.recommendation;
+  withStore([obs], (store) => {
+    store.recordFromSignals(
+      {
+        all_signals: [
+          {
+            id: 'exec::match_sig::1x2::1',
+            fixture_key: 'match_sig',
+            category: 'executable',
+            date: '2026-11-25T20:00:00Z',
+            side_label: '1',
+            market: '1x2',
+            signature_code: '1|Non|1|G2',
+            signature_complete: true,
+          },
+        ],
+      },
+      Date.parse('2026-11-24T12:00:00Z')
+    );
+    const obs = store.observations.find((o) => o.fixture_key === 'match_sig');
+    assert.equal(obs.signature_code, '1|Non|1|G2');
+    assert.equal(obs.signature_complete, true);
+    store.close();
+  });
+});
+
+test('1.6 la calibration par signature lit les observations, pas les matchs live', () => {
+  const code = ALL_72_SIGNATURES[0].code;
+  const report = {
+    observations: [
+      { status: 'settled', signature_code: code, brier_bf: 0.2, brier_pm: 0.3 },
+      { status: 'settled', signature_code: null, brier_bf: 0.1, brier_pm: 0.9 },
+      { status: 'pending', signature_code: code, brier_bf: 0.4, brier_pm: 0.5 },
+    ],
+  };
+  const result = buildConfigurationsFromData([], new Map(), { calibrationReport: report });
+  const entry = result.catalog_72.find((s) => s.code === code);
+  assert.equal(entry.calibration.settled_n, 1);
+  assert.equal(entry.calibration.brier_bf, 0.2);
+  assert.equal(entry.calibration.brier_pm, 0.3);
+  assert.equal(result.catalog_72.filter((s) => s.calibration !== null).length, 1);
+});
+
 test('1.4 le premier prix est conservé, le dernier relevé avant coup d’envoi est séparé', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-phase1-prices-'));
   const file = path.join(dir, 'observations.json');
@@ -212,6 +258,8 @@ test('1.4 migration rejouable des observations historiques', () => {
     assert.equal(obs.first_seen, legacy.captured_at || null);
     assert.equal(obs.last_pre_kickoff, null);
     assert.equal(obs.last_pre_kickoff_sides, null);
+    assert.equal(obs.signature_code, null);
+    assert.equal(obs.signature_complete, null);
     store.close();
   });
 });

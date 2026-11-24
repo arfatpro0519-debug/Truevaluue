@@ -955,21 +955,18 @@ export async function collectFixturesAndQuotes({
   return { fixtures: allFixtures, quotesByKey, warnings };
 }
 
-function calibrationStatsBySignature(configRows, calibrationReport) {
+function calibrationStatsBySignature(calibrationReport) {
   const obsList = Array.isArray(calibrationReport?.observations)
     ? calibrationReport.observations
     : [];
   if (obsList.length === 0) return new Map();
 
-  const sigByFixture = new Map();
-  for (const r of configRows) {
-    sigByFixture.set(r.fixture_key, r.signature.code);
-  }
-
+  // La signature est stockée sur l'observation : un match réglé n'est plus dans
+  // les configurations live, donc plus besoin de jointure dessus.
   const map = new Map();
   for (const o of obsList) {
     if (o.status !== 'settled') continue;
-    const sig = sigByFixture.get(o.fixture_key);
+    const sig = o.signature_code;
     if (!sig) continue;
     let bucket = map.get(sig);
     if (!bucket) {
@@ -1003,7 +1000,7 @@ export function buildConfigurationsFromData(
       (b.total_volume_bf || 0) - (a.total_volume_bf || 0)
   );
 
-  const calBySig = calibrationStatsBySignature(rows, calibrationReport);
+  const calBySig = calibrationStatsBySignature(calibrationReport);
 
   const completeCounts = new Map();
   const partialCounts = new Map();
@@ -1217,7 +1214,7 @@ export async function buildConfigurations({
     force,
     maxPmLookup,
   });
-  const calibrationReport = calibration ? calibration.report() : null;
+  const calibrationReport = calibration ? calibration.report({ limit: 500 }) : null;
   return buildConfigurationsFromData(fixtures, quotesByKey, {
     thresholds,
     calibrationReport,
@@ -1294,6 +1291,7 @@ export function buildSignalsFromData(
           date: f.date,
           date_label: f.date_label,
           signature_code: config.signature.code,
+          signature_complete: config.signature.is_complete,
           pm_signature_code: config.signature.pm_code || null,
           pm_url: compared.pm_url,
           total_volume_bf: compared.total_volume_bf,
@@ -1352,6 +1350,7 @@ export function buildSignalsFromData(
             date: f.date,
             date_label: f.date_label,
             signature_code: config.signature.code,
+            signature_complete: config.signature.is_complete,
             pm_signature_code: config.signature.pm_code || null,
             pm_url: compared.pm_url,
             total_volume_bf: compared.total_volume_bf,
@@ -1397,6 +1396,7 @@ export function buildSignalsFromData(
         date: f.date,
         date_label: f.date_label,
         signature_code: config.signature.code,
+        signature_complete: config.signature.is_complete,
         pm_signature_code: config.signature.pm_code || null,
         pm_url: config.pm_url,
         total_volume_bf: config.total_volume_bf,
@@ -1435,6 +1435,7 @@ export function buildSignalsFromData(
         date: f.date,
         date_label: f.date_label,
         signature_code: config.signature.code,
+        signature_complete: config.signature.is_complete,
         pm_signature_code: config.signature.pm_code || null,
         pm_url: config.pm_url,
         total_volume_bf: config.total_volume_bf,
