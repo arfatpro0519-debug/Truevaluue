@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { mapWithConcurrency } from './async.js';
+import { DEFAULT_CALIBRATION_MIN_N } from './config.js';
 import { formatDate, parseKickoff } from './enrich.js';
 import { findEspnMatch, slugForCompetition } from './espn.js';
 import { MarketKey, MarketShape, marketDef } from './market.js';
@@ -832,8 +833,11 @@ function summarizeCategoryRecords(records, catMeta) {
   };
 }
 
-function selectBestCategory(byCategory) {
-  if (!Array.isArray(byCategory) || byCategory.length === 0) return 'executable';
+function selectBestCategory(byCategory, minN = DEFAULT_CALIBRATION_MIN_N) {
+  if (!Array.isArray(byCategory) || byCategory.length === 0) return null;
+  const minimum = Math.max(1, Number.parseInt(String(minN), 10) || DEFAULT_CALIBRATION_MIN_N);
+  const eligible = byCategory.filter((c) => (c.decided || 0) >= minimum);
+  if (eligible.length === 0) return null;
   const tierOf = (c) => {
     const hasDecided = (c.decided || 0) > 0;
     const hasRoi = typeof c.roi_pct === 'number';
@@ -844,7 +848,7 @@ function selectBestCategory(byCategory) {
     if ((c.total_matches || 0) > 0) return 0.5;
     return 0;
   };
-  const ranked = [...byCategory].sort((a, b) => {
+  const ranked = [...eligible].sort((a, b) => {
     const ta = tierOf(a);
     const tb = tierOf(b);
     if (ta !== tb) return tb - ta;
@@ -1676,13 +1680,19 @@ export class CalibrationStore {
     return map;
   }
 
-  signalResultsReport({ category = 'all', limit = 200, offset = 0, nowMs = Date.now() } = {}) {
+  signalResultsReport({
+    category = 'all',
+    limit = 200,
+    offset = 0,
+    nowMs = Date.now(),
+    minN = DEFAULT_CALIBRATION_MIN_N,
+  } = {}) {
     const safeLimit = Math.min(500, Math.max(1, Number.parseInt(String(limit), 10) || 200));
     const safeOffset = Math.max(0, Number.parseInt(String(offset), 10) || 0);
     const obsByFixture = this._obsByFixtureMap(null, nowMs);
     const enrichedAll = this.signalRecords.map((r) => enrichSignalRecord(r, obsByFixture, nowMs));
     const byCategory = SIGNAL_CATEGORY_META.map((cat) => summarizeCategoryRecords(enrichedAll, cat));
-    const bestCategory = selectBestCategory(byCategory);
+    const bestCategory = selectBestCategory(byCategory, minN);
 
     const validCats = new Set(['executable', 'movement', 'flow', 'contradiction']);
     const requestedCat = category === 'best' ? bestCategory : category;
@@ -1830,7 +1840,13 @@ export class CalibrationStore {
     };
   }
 
-  report({ category = 'all', limit = 200, offset = 0, nowMs = Date.now() } = {}) {
+  report({
+    category = 'all',
+    limit = 200,
+    offset = 0,
+    nowMs = Date.now(),
+    minN = DEFAULT_CALIBRATION_MIN_N,
+  } = {}) {
     const safeLimit = Math.min(500, Math.max(1, Number.parseInt(String(limit), 10) || 200));
     const safeOffset = Math.max(0, Number.parseInt(String(offset), 10) || 0);
     const baseEnrichedObs = this.observations.map((o) => enrichObservationResult(o, nowMs));
@@ -1840,7 +1856,7 @@ export class CalibrationStore {
     const byCategory = SIGNAL_CATEGORY_META.map((cat) =>
       summarizeCategoryRecords(enrichedSignalRecs, cat)
     );
-    const bestCategory = selectBestCategory(byCategory);
+    const bestCategory = selectBestCategory(byCategory, minN);
 
     const enrichedAll = baseEnrichedObs.map((o) => {
       const sigRec = sigRecByFixture.get(o.fixture_key) || null;

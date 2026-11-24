@@ -32,6 +32,9 @@ function loadDotEnvIfPresent() {
 
 loadDotEnvIfPresent();
 
+// Taille d'échantillon minimale avant de désigner une « meilleure catégorie ».
+export const DEFAULT_CALIBRATION_MIN_N = 30;
+
 function env(key) {
   const v = process.env[key];
   if (typeof v !== 'string') return null;
@@ -51,6 +54,7 @@ export function loadConfig() {
     port: envInt('PORT', 3000),
     dataDir: env('DATA_DIR') || 'data',
     syncIntervalSecs: envInt('SYNC_INTERVAL_SECS', 600),
+    calibrationMinN: envInt('CALIBRATION_MIN_N', DEFAULT_CALIBRATION_MIN_N),
     adminPasscode: env('ADMIN_PASSCODE'),
     paymentsEnabled: env('PAYMENTS_ENABLED') === '1',
     telegramBotToken: env('TELEGRAM_BOT_TOKEN'),

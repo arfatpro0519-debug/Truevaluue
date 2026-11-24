@@ -725,7 +725,7 @@ export function createApp(sourcesOrCfg = null) {
       return sendJson(req, res, 200, {
         ok: true,
         settlement,
-        ...calibration.signalResultsReport({ category, limit, offset }),
+        ...calibration.signalResultsReport({ category, limit, offset, minN: cfg.calibrationMinN }),
       });
     } catch (err) {
       console.error('Erreur /api/signals/results:', err);
@@ -754,7 +754,7 @@ export function createApp(sourcesOrCfg = null) {
       return sendJson(req, res, 200, {
         ok: true,
         settlement,
-        ...calibration.report({ category, limit, offset }),
+        ...calibration.report({ category, limit, offset, minN: cfg.calibrationMinN }),
       });
     } catch (err) {
       console.error('Erreur /api/calibration:', err);
@@ -787,8 +787,8 @@ export function createApp(sourcesOrCfg = null) {
         recorded,
         recorded_signals: recordedSignals,
         settlement,
-        signal_results: calibration.signalResultsReport(),
-        ...calibration.report(),
+        signal_results: calibration.signalResultsReport({ minN: cfg.calibrationMinN }),
+        ...calibration.report({ minN: cfg.calibrationMinN }),
       });
     } catch (err) {
       console.error('Erreur POST /api/calibration/sync:', err);

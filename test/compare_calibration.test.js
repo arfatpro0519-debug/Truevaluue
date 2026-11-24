@@ -2073,7 +2073,7 @@ test('CalibrationStore distinguishes played, pending, no_score matches, computes
 
     await store.settle({ espn: espnMock, sportscore: null, cfg: { espnEnabled: true } }, nowMs);
 
-    const bestRep = store.signalResultsReport({ category: 'best', nowMs });
+    const bestRep = store.signalResultsReport({ category: 'best', nowMs, minN: 1 });
     assert.equal(bestRep.best_category, 'executable');
     assert.equal(bestRep.category, 'executable');
     assert.equal(bestRep.category_summary.roi_state, 'positive');
@@ -2092,7 +2092,7 @@ test('CalibrationStore distinguishes played, pending, no_score matches, computes
     assert.equal(pendingRow.is_no_score, false);
     assert.equal(pendingRow.match_stage, 'pending');
 
-    const calBest = store.report({ category: 'best', nowMs });
+    const calBest = store.report({ category: 'best', nowMs, minN: 1 });
     assert.equal(calBest.best_category, 'executable');
     assert.equal(calBest.category, 'executable');
     assert.equal(calBest.summary.reco_roi_state, 'positive');
