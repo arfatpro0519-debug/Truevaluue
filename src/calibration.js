@@ -370,10 +370,9 @@ function enrichObservationResult(obs, nowMs = Date.now()) {
           : matchingSide && typeof matchingSide.pm_pct === 'number' && matchingSide.pm_pct > 1
           ? Number((100 / matchingSide.pm_pct).toFixed(2))
           : null;
-      if (recoWon) {
-        if (odds && odds > 1) recoPnlU = Number((odds - 1).toFixed(2));
-      } else {
-        recoPnlU = -1;
+      // Sans cote exploitable, le pari est exclu du ROI dans les deux sens.
+      if (odds && odds > 1) {
+        recoPnlU = recoWon ? Number((odds - 1).toFixed(2)) : -1;
       }
     }
   }
@@ -635,15 +634,9 @@ function enrichSignalRecord(rec, obsByFixture = null, nowMs = Date.now()) {
             ? Number((100 / s.prop_pct).toFixed(2))
             : null;
         let pnlU = null;
-        if (won) {
-          if (odds && odds > 1) {
-            pnlU = Number((odds - 1).toFixed(2));
-            pnlSum += pnlU;
-            recoStakedU += 1;
-            hasPnl = true;
-          }
-        } else {
-          pnlU = -1;
+        // Une cote manquante exclut le pari du ROI, gagnant comme perdant.
+        if (odds && odds > 1) {
+          pnlU = won ? Number((odds - 1).toFixed(2)) : -1;
           pnlSum += pnlU;
           recoStakedU += 1;
           hasPnl = true;
@@ -828,6 +821,7 @@ function summarizeCategoryRecords(records, catMeta) {
     decided,
     win_rate_pct: decided > 0 ? Number(((won / decided) * 100).toFixed(1)) : null,
     staked_u: stakedU,
+    roi_n: stakedU,
     roi_u: roiU,
     roi_pct: roiPct,
     roi_state: roiState,
@@ -1733,6 +1727,7 @@ export class CalibrationStore {
                 reco_lost: catLost,
                 reco_push: catPush,
                 reco_staked_u: catStakedU,
+                reco_roi_n: catStakedU,
                 reco_pnl_u: catPnl,
                 reco_roi_pct: catRoiPct,
               };
@@ -1820,6 +1815,7 @@ export class CalibrationStore {
         reco_win_rate_pct:
           recoSettled > 0 ? Number(((recoWon / recoSettled) * 100).toFixed(1)) : null,
         reco_staked_u: recoStakedU,
+        reco_roi_n: recoStakedU,
         reco_roi_u: recoRoiU,
         reco_roi_pct: recoRoiPct,
         reco_roi_state: recoRoiState,
@@ -2020,6 +2016,7 @@ export class CalibrationStore {
             ? Number(((recoWonList.length / recoSettledList.length) * 100).toFixed(1))
             : null,
         reco_staked_u: recoStakedU,
+        reco_roi_n: recoStakedU,
         reco_roi_u: recoRoiU,
         reco_roi_pct: recoRoiPct,
         reco_roi_state: recoRoiState,
