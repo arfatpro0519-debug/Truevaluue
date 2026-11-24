@@ -30,6 +30,7 @@ function observation(id, { score, odds = null }) {
     away: 'Beta',
     market: MarketKey.OneXTwo,
     status: 'settled',
+    captured_at: '2026-11-20T19:00:00Z',
     home_score: score[0],
     away_score: score[1],
     recommendation,
@@ -100,6 +101,69 @@ function signalRecord(fixture, category, score, extra = {}) {
     ],
   };
 }
+
+function comparisonRows(bfPct) {
+  return [
+    {
+      fixture_key: 'match_next',
+      home: 'Alpha',
+      away: 'Beta',
+      league: 'Ligue 1',
+      date: '2026-11-25T20:00:00Z',
+      markets: [
+        {
+          market: MarketKey.OneXTwo,
+          short: '1X2',
+          pm_usable: true,
+          sides: [
+            { label: '1', bf_pct: bfPct, pm_pct: bfPct - 4, gap_pp: -4 },
+            { label: 'N', bf_pct: 25, pm_pct: 27, gap_pp: 2 },
+            { label: '2', bf_pct: 20, pm_pct: 22, gap_pp: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+}
+
+test('1.4 le premier prix est conservé, le dernier relevé avant coup d’envoi est séparé', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-phase1-prices-'));
+  const file = path.join(dir, 'observations.json');
+  const first = Date.parse('2026-11-24T12:00:00Z');
+  const last = Date.parse('2026-11-24T13:00:00Z');
+  try {
+    const store = new CalibrationStore(file);
+    assert.equal(store.recordFromComparison(comparisonRows(60), first).added, 1);
+    assert.equal(store.recordFromComparison(comparisonRows(70), last).updated, 1);
+    const obs = store.observations[0];
+    assert.equal(obs.first_seen, new Date(first).toISOString());
+    assert.equal(obs.sides[0].bf_pct, 60);
+    assert.equal(obs.last_pre_kickoff, new Date(last).toISOString());
+    assert.equal(obs.last_pre_kickoff_sides[0].bf_pct, 70);
+    store.close();
+
+    const reopened = new CalibrationStore(file);
+    assert.equal(reopened.observations[0].sides[0].bf_pct, 60);
+    assert.equal(reopened.observations[0].last_pre_kickoff_sides[0].bf_pct, 70);
+    reopened.close();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('1.4 migration rejouable des observations historiques', () => {
+  const legacy = observation('legacy', { score: [1, 0], odds: 2 });
+  delete legacy.first_seen;
+  delete legacy.last_pre_kickoff;
+  delete legacy.last_pre_kickoff_sides;
+  withStore([legacy], (store) => {
+    const obs = store.observations[0];
+    assert.equal(obs.first_seen, legacy.captured_at || null);
+    assert.equal(obs.last_pre_kickoff, null);
+    assert.equal(obs.last_pre_kickoff_sides, null);
+    store.close();
+  });
+});
 
 test('1.3 mouvement et flux : taux de confirmation avec n, jamais de ROI', () => {
   withSignalStore(

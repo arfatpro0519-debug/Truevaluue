@@ -884,6 +884,7 @@ export class CalibrationStore {
     this._metaCache = null;
     this._settleInFlight = null;
     this.observations = this._load();
+    this._migrateObservations();
     this.signalRecords = this._loadSignals();
     this._backfillSignalsFromObservations();
   }
@@ -1009,6 +1010,26 @@ export class CalibrationStore {
       }
     }
     return this._readLegacyJson(this.filePath).filter(isValidObservation);
+  }
+
+  // Migration rejouable : les observations historiques n'ont qu'un instantané.
+  _migrateObservations() {
+    let changed = false;
+    for (const obs of this.observations) {
+      if (obs.first_seen === undefined) {
+        obs.first_seen = obs.captured_at ?? null;
+        changed = true;
+      }
+      if (obs.last_pre_kickoff === undefined) {
+        obs.last_pre_kickoff = null;
+        changed = true;
+      }
+      if (obs.last_pre_kickoff_sides === undefined) {
+        obs.last_pre_kickoff_sides = null;
+        changed = true;
+      }
+    }
+    if (changed) this._save();
   }
 
   _save() {
@@ -1367,6 +1388,13 @@ export class CalibrationStore {
             }
           : existing?.recommendation || null;
 
+        const seenAt = new Date(nowMs).toISOString();
+        const snapshot = validSides.map((s) => ({
+          label: s.label,
+          bf_pct: s.bf_pct,
+          pm_pct: s.pm_pct,
+          gap_pp: s.gap_pp,
+        }));
         const record = {
           id,
           fixture_key: fixture.fixture_key,
@@ -1383,14 +1411,14 @@ export class CalibrationStore {
           pm_spread_pts: mkt.pm_spread_pts,
           max_abs_gap_pp: mkt.max_abs_gap_pp,
           recommendation: keptReco,
-          sides: validSides.map((s) => ({
-            label: s.label,
-            bf_pct: s.bf_pct,
-            pm_pct: s.pm_pct,
-            gap_pp: s.gap_pp,
-          })),
+          // `sides` reste le prix vu à l'apparition du signal : c'est celui que
+          // l'utilisateur aurait pu saisir, et sert au backtest.
+          first_seen: existing?.first_seen || seenAt,
+          sides: existing?.sides || snapshot,
+          last_pre_kickoff: seenAt,
+          last_pre_kickoff_sides: snapshot,
           status: 'pending',
-          captured_at: new Date(nowMs).toISOString(),
+          captured_at: seenAt,
         };
 
         if (existing) {
