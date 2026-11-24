@@ -879,6 +879,7 @@ export class CalibrationStore {
     this.dbPath = filePath.endsWith('.db')
       ? filePath
       : path.join(path.dirname(filePath), 'truevalue.db');
+    this.persistenceStatus = { last_ok_at: null, last_error: null };
     this.db = this._openDb();
     this.storageMode = this.db ? 'sqlite' : 'json';
     this._metaCache = null;
@@ -934,17 +935,44 @@ export class CalibrationStore {
       return db;
     } catch (err) {
       console.error('SQLite indisponible, repli JSON :', err?.message || err);
+      this._recordPersistence(false, 'open_sqlite', err);
       return null;
     }
   }
 
-  _writeJson(targetPath, value) {
+  _recordPersistence(ok, operation, err = null) {
+    const at = new Date().toISOString();
+    if (ok) {
+      this.persistenceStatus.last_ok_at = at;
+      this.persistenceStatus.last_error = null;
+    } else {
+      this.persistenceStatus.last_error = {
+        operation,
+        message: err?.message || String(err || 'erreur inconnue'),
+        at,
+      };
+    }
+  }
+
+  getPersistenceStatus() {
+    const error = this.persistenceStatus.last_error;
+    return {
+      storage_mode: this.storageMode,
+      etat: error ? 'degrade' : 'ok',
+      erreur_persistance: error ? { ...error } : null,
+      derniere_reussite_at: this.persistenceStatus.last_ok_at,
+    };
+  }
+
+  _writeJson(targetPath, value, operation = 'write_json') {
     try {
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });
       fs.writeFileSync(targetPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+      this._recordPersistence(true, operation);
       return true;
     } catch (err) {
       console.error('Écriture JSON impossible:', err?.message || err);
+      this._recordPersistence(false, operation, err);
       return false;
     }
   }
@@ -958,6 +986,7 @@ export class CalibrationStore {
       }
     } catch (err) {
       console.error('Lecture du stockage JSON impossible:', err?.message || err);
+      this._recordPersistence(false, 'read_meta', err);
     }
     this._metaCache = {
       settings: meta?.settings && typeof meta.settings === 'object' ? meta.settings : {},
@@ -968,7 +997,7 @@ export class CalibrationStore {
   }
 
   _writeMeta() {
-    return this._writeJson(this.metaFilePath, this._readMeta());
+    return this._writeJson(this.metaFilePath, this._readMeta(), 'write_meta');
   }
 
   _readLegacyJson(targetPath) {
@@ -1005,8 +1034,9 @@ export class CalibrationStore {
           this._save();
         }
         return legacy;
-      } catch {
-        // Fallback below if SQLite read fails
+      } catch (err) {
+        console.error('Lecture SQLite observations impossible, repli JSON :', err?.message || err);
+        this._recordPersistence(false, 'load_observations', err);
       }
     }
     return this._readLegacyJson(this.filePath).filter(isValidObservation);
@@ -1034,18 +1064,28 @@ export class CalibrationStore {
 
   _save() {
     if (!this.db) {
-      this._writeJson(this.filePath, this.observations);
-      return;
+      return this._writeJson(this.filePath, this.observations, 'write_observations');
     }
     try {
       this.db.exec('BEGIN IMMEDIATE');
-      this.db.exec('DELETE FROM observations');
-      const stmt = this.db.prepare(
-        'INSERT OR REPLACE INTO observations (id, fixture_key, captured_at, date, status, data_json) VALUES (?, ?, ?, ?, ?, ?)'
+      this.db.exec('CREATE TEMP TABLE IF NOT EXISTS keep_observation_ids (id TEXT PRIMARY KEY)');
+      this.db.exec('DELETE FROM keep_observation_ids');
+      const keepStmt = this.db.prepare('INSERT OR IGNORE INTO keep_observation_ids (id) VALUES (?)');
+      const upsert = this.db.prepare(
+        `INSERT INTO observations (id, fixture_key, captured_at, date, status, data_json)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           fixture_key = excluded.fixture_key,
+           captured_at = excluded.captured_at,
+           date = excluded.date,
+           status = excluded.status,
+           data_json = excluded.data_json`
       );
       for (const obs of this.observations) {
-        stmt.run(
-          String(obs.id),
+        const id = String(obs.id);
+        keepStmt.run(id);
+        upsert.run(
+          id,
           String(obs.fixture_key || ''),
           obs.captured_at || null,
           obs.date || null,
@@ -1053,13 +1093,20 @@ export class CalibrationStore {
           JSON.stringify(obs)
         );
       }
+      // Ne supprime que les lignes sorties du plafond ou retirées de la mémoire.
+      this.db.exec('DELETE FROM observations WHERE id NOT IN (SELECT id FROM keep_observation_ids)');
       this.db.exec('COMMIT');
-    } catch {
+      this._recordPersistence(true, 'write_observations');
+      return true;
+    } catch (err) {
       try {
         this.db.exec('ROLLBACK');
       } catch {
         // Ignore rollback failure
       }
+      console.error('Écriture observations impossible:', err?.message || err);
+      this._recordPersistence(false, 'write_observations', err);
+      return false;
     }
   }
 
@@ -1088,8 +1135,9 @@ export class CalibrationStore {
           this._saveSignals();
         }
         return legacy;
-      } catch {
-        // Fallback below
+      } catch (err) {
+        console.error('Lecture SQLite signaux impossible, repli JSON :', err?.message || err);
+        this._recordPersistence(false, 'load_signals', err);
       }
     }
     return this._readLegacyJson(this.signalFilePath).filter(validSigRec);
@@ -1097,31 +1145,50 @@ export class CalibrationStore {
 
   _saveSignals() {
     if (!this.db) {
-      this._writeJson(this.signalFilePath, this.signalRecords);
-      return;
+      return this._writeJson(this.signalFilePath, this.signalRecords, 'write_signals');
     }
     try {
       this.db.exec('BEGIN IMMEDIATE');
-      this.db.exec('DELETE FROM signal_records');
-      const stmt = this.db.prepare(
-        'INSERT OR REPLACE INTO signal_records (fixture_key, captured_at, date, status, data_json) VALUES (?, ?, ?, ?, ?)'
+      this.db.exec('CREATE TEMP TABLE IF NOT EXISTS keep_signal_keys (fixture_key TEXT PRIMARY KEY)');
+      this.db.exec('DELETE FROM keep_signal_keys');
+      const keepStmt = this.db.prepare(
+        'INSERT OR IGNORE INTO keep_signal_keys (fixture_key) VALUES (?)'
+      );
+      const upsert = this.db.prepare(
+        `INSERT INTO signal_records (fixture_key, captured_at, date, status, data_json)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(fixture_key) DO UPDATE SET
+           captured_at = excluded.captured_at,
+           date = excluded.date,
+           status = excluded.status,
+           data_json = excluded.data_json`
       );
       for (const rec of this.signalRecords) {
-        stmt.run(
-          String(rec.fixture_key),
+        const key = String(rec.fixture_key);
+        keepStmt.run(key);
+        upsert.run(
+          key,
           rec.captured_at || null,
           rec.date || null,
           String(rec.status || 'pending'),
           JSON.stringify(rec)
         );
       }
+      this.db.exec(
+        'DELETE FROM signal_records WHERE fixture_key NOT IN (SELECT fixture_key FROM keep_signal_keys)'
+      );
       this.db.exec('COMMIT');
-    } catch {
+      this._recordPersistence(true, 'write_signals');
+      return true;
+    } catch (err) {
       try {
         this.db.exec('ROLLBACK');
       } catch {
         // Ignore rollback failure
       }
+      console.error('Écriture signaux impossible:', err?.message || err);
+      this._recordPersistence(false, 'write_signals', err);
+      return false;
     }
   }
 

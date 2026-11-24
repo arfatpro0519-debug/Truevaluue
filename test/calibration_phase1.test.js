@@ -126,6 +126,57 @@ function comparisonRows(bfPct) {
   ];
 }
 
+test('1.5 la persistance SQLite upsert les lignes sans tout supprimer', () => {
+  withStore([observation('win_odds', { score: [2, 0], odds: 2 })], (store) => {
+    const statements = [];
+    store.db = {
+      exec(sql) {
+        statements.push(sql);
+      },
+      prepare(sql) {
+        statements.push(sql);
+        return { run() {} };
+      },
+      close() {},
+    };
+    assert.equal(store._save(), true);
+    assert.ok(statements.some((s) => s.includes('ON CONFLICT(id) DO UPDATE')));
+    assert.ok(!statements.some((s) => /^DELETE FROM observations$/m.test(s)));
+    assert.ok(statements.some((s) => s.includes('NOT IN (SELECT id FROM keep_observation_ids)')));
+    assert.equal(store.getPersistenceStatus().etat, 'ok');
+
+    statements.length = 0;
+    assert.equal(store._saveSignals(), true);
+    assert.ok(statements.some((s) => s.includes('ON CONFLICT(fixture_key) DO UPDATE')));
+    assert.ok(!statements.some((s) => /^DELETE FROM signal_records$/m.test(s)));
+    store.close();
+  });
+});
+
+test('1.5 une erreur de persistance est remontée dans getPersistenceStatus', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-phase1-err-'));
+  const blocker = path.join(dir, 'blocker');
+  try {
+    fs.writeFileSync(blocker, 'x', 'utf8');
+    const store = new CalibrationStore(path.join(dir, 'observations.json'));
+    store.filePath = path.join(blocker, 'observations.json');
+    const previous = console.error;
+    console.error = () => {};
+    try {
+      assert.equal(store._save(), false);
+    } finally {
+      console.error = previous;
+    }
+    const status = store.getPersistenceStatus();
+    assert.equal(status.etat, 'degrade');
+    assert.equal(status.erreur_persistance.operation, 'write_observations');
+    assert.ok(status.erreur_persistance.message);
+    store.close();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('1.4 le premier prix est conservé, le dernier relevé avant coup d’envoi est séparé', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-phase1-prices-'));
   const file = path.join(dir, 'observations.json');
