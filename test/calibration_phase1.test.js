@@ -62,6 +62,68 @@ test('1.1 un pari sans cote est exclu du ROI, en gain comme en perte', () => {
   );
 });
 
+function withSignalStore(records, fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-phase1-sig-'));
+  const file = path.join(dir, 'observations.json');
+  try {
+    fs.writeFileSync(
+      path.join(dir, 'signal_history.json'),
+      JSON.stringify(records),
+      'utf8'
+    );
+    return fn(new CalibrationStore(file));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function signalRecord(fixture, category, score, extra = {}) {
+  return {
+    fixture_key: fixture,
+    home: 'Alpha',
+    away: 'Beta',
+    league: 'Ligue 1',
+    date: '2026-11-20T20:00:00Z',
+    captured_at: '2026-11-20T19:00:00Z',
+    status: 'settled',
+    home_score: score[0],
+    away_score: score[1],
+    signals: [
+      {
+        id: `${category}::${fixture}`,
+        category,
+        side_label: '1',
+        market: '1x2',
+        score_sort: 0,
+        ...extra,
+      },
+    ],
+  };
+}
+
+test('1.3 mouvement et flux : taux de confirmation avec n, jamais de ROI', () => {
+  withSignalStore(
+    [
+      signalRecord('move_ok', 'movement', [2, 0]),
+      signalRecord('flow_ko', 'flow', [0, 2], { direction: 'buy_pm' }),
+    ],
+    (store) => {
+      const rep = store.signalResultsReport();
+      const byCat = Object.fromEntries(rep.by_category.map((c) => [c.category, c]));
+      assert.equal(byCat.movement.confirmation_n, 1);
+      assert.equal(byCat.movement.confirmation_rate_pct, 100);
+      assert.equal(byCat.movement.roi_n, 0);
+      assert.equal(byCat.movement.roi_u, null);
+      assert.equal(byCat.flow.confirmation_n, 1);
+      assert.equal(byCat.flow.confirmation_rate_pct, 0);
+      assert.equal(byCat.flow.roi_u, null);
+      assert.equal(rep.summary.signal_confirmation_n, 2);
+      assert.equal(rep.summary.signal_confirmation_rate_pct, 50);
+      store.close();
+    }
+  );
+});
+
 test('1.2 aucune meilleure catégorie sous le seuil d’échantillon', () => {
   withStore([observation('win_odds', { score: [2, 0], odds: 2 })], (store) => {
     const rep = store.report({ category: 'best' });

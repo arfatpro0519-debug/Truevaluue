@@ -821,6 +821,10 @@ function summarizeCategoryRecords(records, catMeta) {
     push,
     decided,
     win_rate_pct: decided > 0 ? Number(((won / decided) * 100).toFixed(1)) : null,
+    // Les signaux sans cote (mouvement, flux) n'ont pas de ROI : leur taux est un
+    // taux de confirmation, toujours accompagné de son effectif.
+    confirmation_n: decided,
+    confirmation_rate_pct: decided > 0 ? Number(((won / decided) * 100).toFixed(1)) : null,
     staked_u: stakedU,
     roi_n: stakedU,
     roi_u: roiU,
@@ -1738,6 +1742,11 @@ export class CalibrationStore {
                 reco_push: catPush,
                 reco_staked_u: catStakedU,
                 reco_roi_n: catStakedU,
+                confirmation_n: catWon + catLost,
+                confirmation_rate_pct:
+                  catWon + catLost > 0
+                    ? Number(((catWon / (catWon + catLost)) * 100).toFixed(1))
+                    : null,
                 reco_pnl_u: catPnl,
                 reco_roi_pct: catRoiPct,
               };
@@ -1760,11 +1769,21 @@ export class CalibrationStore {
     let recoStakedU = 0;
     let pnlSum = 0;
     let hasPnl = false;
+    let confirmationN = 0;
+    let confirmationWon = 0;
 
     for (const r of enrichedAll) {
       for (const s of r.signals || []) {
         totalSignals += 1;
         if (r.status === 'settled' || r.status === 'push') settledSignals += 1;
+        if (s.category !== 'executable' && typeof s.pnl_u !== 'number') {
+          if (s.signal_result === 'win') {
+            confirmationN += 1;
+            confirmationWon += 1;
+          } else if (s.signal_result === 'loss') {
+            confirmationN += 1;
+          }
+        }
         if (s.category === 'executable') {
           recoTotal += 1;
           if (s.signal_result === 'win') {
@@ -1829,6 +1848,9 @@ export class CalibrationStore {
         reco_roi_u: recoRoiU,
         reco_roi_pct: recoRoiPct,
         reco_roi_state: recoRoiState,
+        signal_confirmation_n: confirmationN,
+        signal_confirmation_rate_pct:
+          confirmationN > 0 ? Number(((confirmationWon / confirmationN) * 100).toFixed(1)) : null,
       },
       category_summary: catStats,
       by_category: byCategory,
