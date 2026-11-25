@@ -198,7 +198,8 @@ function redactSignalItem(s, idx) {
     proposal_rank: s.proposal_rank ?? null,
     total_volume_bf: s.total_volume_bf ?? null,
     pm_liquidity: s.pm_liquidity ?? null,
-    score_sort: s.score_sort ?? 0,
+    sort_key: s.sort_key ?? s.score_sort ?? 0,
+    score_sort: s.score_sort ?? s.sort_key ?? 0, // alias v1 déprécié
     title: 'Signal verrouillé · Truevalue Pro',
     detail: 'Débloquez Truevalue Pro pour accéder au sens du pari, à l’edge net et au comparateur complet.',
     pm_url: null,
@@ -311,7 +312,8 @@ export function redactConfigurationsPayload(payload, auth) {
           total_volume_bf: r.total_volume_bf,
           pm_liquidity: r.pm_liquidity,
           markets_count: r.markets_count,
-          interest_score: r.interest_score,
+          sort_key: r.sort_key ?? r.interest_score ?? 0,
+          interest_score: r.interest_score ?? r.sort_key ?? 0, // alias v1 déprécié
           locked: true,
           pm_url: null,
           signature: { code: '? | ? | ? | ?', is_complete: false, blocks_present: 0, pm_code: null },

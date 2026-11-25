@@ -933,11 +933,14 @@ export function analyzeFixtureConfiguration(
     max_exec_edge_pp: compared?.max_exec_edge_pp ?? null,
   };
 
-  cfgRow.interest_score = computeConfigInterestScore(cfgRow);
+  // Clé de tri INTERNE (2.4) : jamais affichée dans l'interface v2 ni exposée en /api/v2.
+  // L'alias interest_score est conservé uniquement pour les routes /api/* dépréciées.
+  cfgRow.sort_key = computeConfigSortKey(cfgRow);
+  cfgRow.interest_score = cfgRow.sort_key;
   return cfgRow;
 }
 
-export function computeConfigInterestScore(row) {
+export function computeConfigSortKey(row) {
   if (!row) return 0;
   const conc = row.axes?.concordance || {};
   const vari = row.axes?.variation || {};
@@ -967,6 +970,20 @@ export function computeConfigInterestScore(row) {
   return round2(
     contraScore + moveScore + pmScore + edgeGapScore + convBonus + structScore + volScore + stalePenalty
   );
+}
+
+// Alias v1 déprécié — ne pas utiliser dans le nouveau code.
+export const computeConfigInterestScore = computeConfigSortKey;
+
+// Tri PUBLIC des Écarts (2.4) : valeur nette décroissante, puis liquidité Polymarket.
+// Aucune clé de tri interne n'intervient dans l'ordre affiché.
+export function sortEcartsParValeurNette(list = []) {
+  return [...list].sort((a, b) => {
+    const ea = Number.isFinite(a?.net_edge_pp) ? a.net_edge_pp : -Infinity;
+    const eb = Number.isFinite(b?.net_edge_pp) ? b.net_edge_pp : -Infinity;
+    if (ea !== eb) return eb - ea;
+    return (b?.pm_liquidity ?? 0) - (a?.pm_liquidity ?? 0);
+  });
 }
 
 export async function collectFixturesAndQuotes({
@@ -1198,7 +1215,7 @@ export function buildConfigurationsFromData(
       const topInt = Object.entries(b.intensity_counts).sort((x, y) => y[1] - x[1])[0]?.[0] || '—';
       const cal = calBySig.get(b.code);
       const avgVol = b.count > 0 ? Math.round(b.volume_sum / b.count) : 0;
-      const interestScore =
+      const sortKey =
         b.count === 0
           ? 0
           : round2(
@@ -1221,7 +1238,8 @@ export function buildConfigurationsFromData(
         convergences: b.convergences,
         reversals: b.reversals,
         avg_volume_bf: avgVol,
-        interest_score: interestScore,
+        sort_key: sortKey,
+        interest_score: sortKey, // alias v1 déprécié
         dominant_intensity: topInt,
         sample_warning: b.count > 0 && b.count < 30 ? 'Échantillon faible (n < 30)' : null,
         calibration: cal
@@ -1236,7 +1254,7 @@ export function buildConfigurationsFromData(
     .sort(
       (a, b) =>
         (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0) ||
-        (b.interest_score || 0) - (a.interest_score || 0) ||
+        (b.sort_key || 0) - (a.sort_key || 0) ||
         b.count - a.count ||
         a.code.localeCompare(b.code)
     );
@@ -1244,7 +1262,7 @@ export function buildConfigurationsFromData(
   const partialSignatures = [...partialCounts.values()]
     .map((p) => {
       const avgVol = p.count > 0 ? Math.round(p.volume_sum / p.count) : 0;
-      const interestScore = round2(
+      const sortKey = round2(
         p.blocks_present * 4 +
           Math.min(20, Math.log2(p.count + 1) * 5) +
           Math.min(16, p.contradictions * 7) +
@@ -1259,12 +1277,13 @@ export function buildConfigurationsFromData(
         pm_matched: p.pm_matched,
         contradictions: p.contradictions,
         avg_volume_bf: avgVol,
-        interest_score: interestScore,
+        sort_key: sortKey,
+        interest_score: sortKey, // alias v1 déprécié
       };
     })
     .sort(
       (a, b) =>
-        (b.interest_score || 0) - (a.interest_score || 0) ||
+        (b.sort_key || 0) - (a.sort_key || 0) ||
         b.count - a.count ||
         b.blocks_present - a.blocks_present
     );
@@ -1417,7 +1436,8 @@ export function buildSignalsFromData(
           title: rank > 1 ? `${rank}e proposition : ${reco.action}` : `Proposition : ${reco.action}`,
           detail: `Prob. ${reco.prop_pct?.toFixed(1) ?? reco.pm_exec_pct?.toFixed(1) ?? '—'} % (BF ${reco.bf_prop_pct?.toFixed(1) ?? reco.bf_pct?.toFixed(1) ?? '—'} %) · Écart net ${edgeSign}${edgeVal.toFixed(1)} pts${reco.ev_pct > 0 ? ` · EV +${reco.ev_pct.toFixed(1)} %` : ''}`,
           net_edge_pp: reco.net_edge_pp,
-          score_sort: round2(execScore),
+          sort_key: round2(execScore),
+          score_sort: round2(execScore), // alias v1 déprécié
           recommendation: reco,
           config_summary: {
             signature: config.signature.code,
@@ -1472,7 +1492,8 @@ export function buildSignalsFromData(
             title: `${obs.label} (${mkt.short})`,
             detail: obs.detail,
             net_edge_pp: mkt.max_exec_edge_pp,
-            score_sort: round2(flowScore),
+            sort_key: round2(flowScore),
+            score_sort: round2(flowScore), // alias v1 déprécié
             market_data: mkt,
           });
         }
@@ -1519,7 +1540,8 @@ export function buildSignalsFromData(
         detail: `Ouverture → actuel : ${v.drop_pct !== null ? `${v.drop_pct > 0 ? '+' : ''}${v.drop_pct.toFixed(1)} %` : `${v.amplitude_pct.toFixed(1)} %`}${v.prob_delta_pp !== null ? ` (${v.prob_delta_pp > 0 ? '+' : ''}${v.prob_delta_pp.toFixed(1)} pts prob.)` : ''}${v.pm_change_1d_pts !== null ? ` · PM 24h ${v.pm_change_1d_pts > 0 ? '+' : ''}${v.pm_change_1d_pts.toFixed(1)} pts` : ''}`,
         amplitude_pct: v.amplitude_pct,
         prob_delta_pp: v.prob_delta_pp,
-        score_sort: round2(moveScore),
+        sort_key: round2(moveScore),
+        score_sort: round2(moveScore), // alias v1 déprécié
         config_summary: config,
       });
     }
@@ -1561,7 +1583,8 @@ export function buildSignalsFromData(
         detail: contras.map((c) => c.detail).join(' | '),
         causes,
         items: contras,
-        score_sort: round2(contraScore),
+        sort_key: round2(contraScore),
+        score_sort: round2(contraScore), // alias v1 déprécié
         config_summary: config,
       });
     }
@@ -1572,19 +1595,21 @@ export function buildSignalsFromData(
       (a.proposal_rank || 9) - (b.proposal_rank || 9) ||
       ((b.net_edge_pp ?? -999) >= 0 ? 1 : 0) - ((a.net_edge_pp ?? -999) >= 0 ? 1 : 0) ||
       b.tier_rank - a.tier_rank ||
-      (b.score_sort || 0) - (a.score_sort || 0) ||
+      (b.sort_key || 0) - (a.sort_key || 0) ||
       (b.market_priority || 1) - (a.market_priority || 1) ||
       (b.net_edge_pp ?? -999) - (a.net_edge_pp ?? -999) ||
       b.total_volume_bf - a.total_volume_bf
   );
-  flowSignals.sort((a, b) => b.score_sort - a.score_sort || b.total_volume_bf - a.total_volume_bf);
-  configurationSignals.sort((a, b) => b.score_sort - a.score_sort || b.total_volume_bf - a.total_volume_bf);
+  flowSignals.sort((a, b) => b.sort_key - a.sort_key || b.total_volume_bf - a.total_volume_bf);
+  configurationSignals.sort((a, b) => b.sort_key - a.sort_key || b.total_volume_bf - a.total_volume_bf);
 
   const allSignals = [
     ...executableSignals,
     ...flowSignals,
     ...configurationSignals,
-  ].sort((a, b) => b.score_sort - a.score_sort || b.total_volume_bf - a.total_volume_bf);
+  ].sort((a, b) => b.sort_key - a.sort_key || b.total_volume_bf - a.total_volume_bf);
+  // La liste plate est la surface publique : tri valeur nette puis liquidité (2.4).
+  const publicEcarts = sortEcartsParValeurNette(allSignals);
 
   return {
     generated_at: new Date().toISOString(),
@@ -1604,7 +1629,7 @@ export function buildSignalsFromData(
     executable_signals: executableSignals,
     flow_signals: flowSignals,
     configuration_signals: configurationSignals,
-    all_signals: allSignals,
+    all_signals: publicEcarts,
     warnings,
   };
 }

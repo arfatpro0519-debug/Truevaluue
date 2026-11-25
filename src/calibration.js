@@ -1246,7 +1246,8 @@ export class CalibrationStore {
         prop_odds: obs.recommendation.prop_odds ?? null,
         prop_pct: obs.recommendation.prop_pct ?? null,
         bf_prop_pct: obs.recommendation.bf_prop_pct ?? null,
-        score_sort: 80,
+        sort_key: 80,
+        score_sort: 80, // alias v1 déprécié
       };
 
       if (!existing) {
@@ -1485,12 +1486,13 @@ export class CalibrationStore {
           amplitude_pct: typeof s.amplitude_pct === 'number' ? s.amplitude_pct : null,
           prob_delta_pp: typeof s.prob_delta_pp === 'number' ? s.prob_delta_pp : null,
           items: Array.isArray(s.items) ? s.items.slice(0, 5) : undefined,
-          score_sort: s.score_sort || 0,
+          sort_key: s.sort_key ?? s.score_sort ?? 0,
+          score_sort: s.score_sort ?? s.sort_key ?? 0, // alias v1 déprécié
         });
       }
 
       const mergedSigs = [...sigMap.values()]
-        .sort((a, b) => (b.score_sort || 0) - (a.score_sort || 0))
+        .sort((a, b) => (b.sort_key || 0) - (a.sort_key || 0))
         .slice(0, 12);
 
       const rec = {

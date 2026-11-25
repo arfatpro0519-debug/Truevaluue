@@ -8,6 +8,7 @@ import {
   deriveGoalsProfile,
   GOALS_QUALITY,
   resolveConfigThresholds,
+  sortEcartsParValeurNette,
 } from '../src/configurations.js';
 import { MarketKey } from '../src/market.js';
 
@@ -208,4 +209,33 @@ test('2.3 les seuils 58/60/62/54, 2/5/10, 500, 28/40/72 h et 5 000 $ sont config
     thresholds: { lowGoalsFavMinPct: 70 },
   });
   assert.equal(tuned.rows[0].axes.concordance.causes.includes('btts_profil_buts'), false);
+});
+
+test('2.4 les scores de tri internes deviennent sort_key et le tri public suit la valeur nette', () => {
+  const fake = [
+    { id: 'a', net_edge_pp: 2, pm_liquidity: 100 },
+    { id: 'b', net_edge_pp: 5, pm_liquidity: 100 },
+    { id: 'c', net_edge_pp: 5, pm_liquidity: 900 },
+    { id: 'd', net_edge_pp: null, pm_liquidity: 5000 },
+  ];
+  assert.deepEqual(
+    sortEcartsParValeurNette(fake).map((s) => s.id),
+    ['c', 'b', 'a', 'd']
+  );
+
+  const fixture = goalsFixture({ ou15: 'Under', ou25: 'Under', ou35: 'Under' });
+  const cfg = buildConfigurationsFromData([fixture], new Map(), { nowMs: NOW });
+  assert.equal(typeof cfg.rows[0].sort_key, 'number');
+  assert.equal(cfg.rows[0].sort_key, cfg.rows[0].interest_score);
+  assert.equal(cfg.catalog_72[0].sort_key, cfg.catalog_72[0].interest_score);
+
+  const signals = buildSignalsFromData([fixture], new Map(), { preset: 'zero', nowMs: NOW });
+  for (const s of signals.all_signals) {
+    assert.equal(typeof s.sort_key, 'number');
+    assert.equal(s.sort_key, s.score_sort);
+  }
+  const edges = signals.all_signals.map((s) =>
+    Number.isFinite(s.net_edge_pp) ? s.net_edge_pp : -Infinity
+  );
+  for (let i = 1; i < edges.length; i += 1) assert.ok(edges[i - 1] >= edges[i]);
 });
