@@ -11,6 +11,12 @@ import {
   sortEcartsParValeurNette,
 } from '../src/configurations.js';
 import { MarketKey } from '../src/market.js';
+import {
+  classifyNiveau,
+  CONFIDENCE_TO_NIVEAU,
+  evaluateFixtureRecommendations,
+  STRICT_THRESHOLDS,
+} from '../src/recommend.js';
 
 const NOW = Date.parse('2026-11-25T12:00:00Z');
 const FUTURE = '2026-11-27T19:00:00Z';
@@ -238,4 +244,71 @@ test('2.4 les scores de tri internes deviennent sort_key et le tri public suit l
     Number.isFinite(s.net_edge_pp) ? s.net_edge_pp : -Infinity
   );
   for (let i = 1; i < edges.length; i += 1) assert.ok(edges[i - 1] >= edges[i]);
+});
+
+test('2.5 le Niveau réutilise net_edge_pp et ajoute Limité sous 5 000 $ de liquidité', () => {
+  assert.equal(classifyNiveau({ net_edge_pp: 5, pm_liquidity: 6000 }), 'fort');
+  assert.equal(classifyNiveau({ net_edge_pp: 3, pm_liquidity: 6000 }), 'moyen');
+  assert.equal(classifyNiveau({ net_edge_pp: 1.9, pm_liquidity: 6000 }), 'faible');
+  assert.equal(classifyNiveau({ net_edge_pp: 5, pm_liquidity: 4999 }), 'limite');
+  assert.equal(classifyNiveau({ net_edge_pp: 5, pm_liquidity: 5000 }), 'fort');
+  assert.equal(classifyNiveau({ net_edge_pp: null, pm_liquidity: 6000 }), null);
+  assert.equal(
+    classifyNiveau(
+      { net_edge_pp: 5, pm_liquidity: 6000 },
+      { ...STRICT_THRESHOLDS, fortMinNetEdgePp: 6 }
+    ),
+    'moyen'
+  );
+  assert.equal(
+    classifyNiveau(
+      { net_edge_pp: 5, pm_liquidity: 2000 },
+      { ...STRICT_THRESHOLDS, minPmLiquidityForNiveauUsd: 1000 }
+    ),
+    'fort'
+  );
+  assert.deepEqual(CONFIDENCE_TO_NIVEAU, { high: 'fort', moderate: 'moyen', low: 'faible' });
+
+  const compared = {
+    date: FUTURE,
+    fixture_key: 'niveau_fixture',
+    markets: [
+      {
+        market: MarketKey.OneXTwo,
+        short: '1X2',
+        label: 'Résultat du match',
+        shape: 'three_way',
+        bf_source: 'native',
+        bf_volume: 20000,
+        pm_liquidity: 6000,
+        pm_spread_pts: 2,
+        pm_usable: true,
+        observations: [{ type: 'lag_pm' }],
+        sides: [
+          { label: '1', bf_pct: 60, bf_odds: 1.67, bf_drop_pct: -4, bf_share_pct: 50, pm_pct: 50, pm_bid: 0.49, pm_ask: 0.51, buy_edge_pp: 9, sell_edge_pp: -9 },
+          { label: 'N', bf_pct: 22, bf_odds: 4.5, bf_drop_pct: 0, bf_share_pct: 25, pm_pct: 25, pm_bid: 0.24, pm_ask: 0.26, buy_edge_pp: -2, sell_edge_pp: -2 },
+          { label: '2', bf_pct: 18, bf_odds: 5.5, bf_drop_pct: 0, bf_share_pct: 25, pm_pct: 25, pm_bid: 0.24, pm_ask: 0.26, buy_edge_pp: -3, sell_edge_pp: -3 },
+        ],
+      },
+    ],
+  };
+  const res = evaluateFixtureRecommendations(compared, NOW);
+  const reco = res.top_recommendation;
+  assert.ok(reco);
+  assert.equal(reco.net_edge_pp, 9);
+  assert.equal(reco.niveau, 'fort');
+  assert.equal(reco.niveau_label, 'Fort');
+  assert.equal(reco.tier_niveau, CONFIDENCE_TO_NIVEAU[reco.tier]);
+
+  const limited = evaluateFixtureRecommendations(compared, NOW, {
+    minPmLiquidityForNiveauUsd: 5000,
+    minPmLiquidity: 0,
+  });
+  // Le carnet à 6 000 $ reste au-dessus du seuil : pas de « Limité » artificiel.
+  assert.equal(limited.top_recommendation.niveau, 'fort');
+  const withLowLiquidity = structuredClone(compared);
+  withLowLiquidity.markets[0].pm_liquidity = 4000;
+  const limRes = evaluateFixtureRecommendations(withLowLiquidity, NOW, { minPmLiquidity: 0 });
+  assert.equal(limRes.top_recommendation.niveau, 'limite');
+  assert.equal(limRes.top_recommendation.niveau_label, 'Limité');
 });

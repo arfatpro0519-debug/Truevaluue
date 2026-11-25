@@ -6,8 +6,11 @@ import { compareFixture } from './compare.js';
 import { enrich, fixtureKey, parseKickoff, round1, round2 } from './enrich.js';
 import { ALL_MARKETS, MarketKey, MarketShape, marketDef } from './market.js';
 import {
+  classifyNiveau,
+  CONFIDENCE_TO_NIVEAU,
   DEFAULT_PROPOSAL_PRESET,
   evaluateFixtureRecommendations,
+  niveauLabel,
   PROPOSAL_PRESETS,
   resolveProposalThresholds,
   STRICT_THRESHOLDS,
@@ -986,6 +989,15 @@ export function sortEcartsParValeurNette(list = []) {
   });
 }
 
+// Ajoute le Niveau public sans jamais recalculer la valeur nette (2.5).
+function attachNiveau(signal, thresholds) {
+  const niveau = classifyNiveau(
+    { net_edge_pp: signal.net_edge_pp ?? null, pm_liquidity: signal.pm_liquidity ?? null },
+    thresholds
+  );
+  return { ...signal, niveau, niveau_label: niveauLabel(niveau) };
+}
+
 export async function collectFixturesAndQuotes({
   scraper,
   polymarket,
@@ -1428,6 +1440,10 @@ export function buildSignalsFromData(
           tier: reco.tier,
           tier_rank: reco.tier_rank,
           tier_label: reco.tier_label,
+          // Niveau public : réutilise le net_edge_pp et les paliers de recommend.js.
+          niveau: reco.niveau ?? null,
+          niveau_label: reco.niveau_label || 'Indisponible',
+          tier_niveau: CONFIDENCE_TO_NIVEAU[reco.tier] || null,
           market: reco.market,
           market_short: reco.market_short,
           market_priority: prio,
@@ -1603,6 +1619,12 @@ export function buildSignalsFromData(
   flowSignals.sort((a, b) => b.sort_key - a.sort_key || b.total_volume_bf - a.total_volume_bf);
   configurationSignals.sort((a, b) => b.sort_key - a.sort_key || b.total_volume_bf - a.total_volume_bf);
 
+  for (const signal of [...flowSignals, ...configurationSignals]) {
+    const decorated = attachNiveau(signal, recoThresholds);
+    signal.niveau = decorated.niveau;
+    signal.niveau_label = decorated.niveau_label;
+  }
+
   const allSignals = [
     ...executableSignals,
     ...flowSignals,
@@ -1625,6 +1647,11 @@ export function buildSignalsFromData(
       high: executableSignals.filter((s) => s.tier === 'high').length,
       moderate: executableSignals.filter((s) => s.tier === 'moderate').length,
       low: executableSignals.filter((s) => s.tier === 'low').length,
+      // Niveaux publics (brief §4) — `limite` n'est pas une probabilité de gain.
+      fort: allSignals.filter((s) => s.niveau === 'fort').length,
+      moyen: allSignals.filter((s) => s.niveau === 'moyen').length,
+      faible: allSignals.filter((s) => s.niveau === 'faible').length,
+      limite: allSignals.filter((s) => s.niveau === 'limite').length,
     },
     executable_signals: executableSignals,
     flow_signals: flowSignals,

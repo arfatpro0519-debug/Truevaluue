@@ -21,12 +21,59 @@ export const CONFIDENCE_LABELS = Object.freeze({
   low: 'Confiance faible',
 });
 
+// Niveau PUBLIC (brief §4) : Fort ≥ 4 pts nets, Moyen ≥ 2, Faible < 2,
+// Limité si la liquidité Polymarket est < 5 000 $. Ce n'est PAS une probabilité de gain.
+export const Niveau = Object.freeze({
+  Fort: 'fort',
+  Moyen: 'moyen',
+  Faible: 'faible',
+  Limite: 'limite',
+});
+
+export const NIVEAU_LABELS = Object.freeze({
+  fort: 'Fort',
+  moyen: 'Moyen',
+  faible: 'Faible',
+  limite: 'Limité',
+});
+
+// Réconciliation avec les anciens paliers internes high/moderate/low.
+export const CONFIDENCE_TO_NIVEAU = Object.freeze({
+  high: Niveau.Fort,
+  moderate: Niveau.Moyen,
+  low: Niveau.Faible,
+});
+
+/**
+ * Classifie le niveau à partir de la valeur nette DÉJÀ calculée dans ce moteur
+ * (`net_edge_pp`) et de la liquidité Polymarket. Aucun recalcul de l'écart ici.
+ * Retourne null si la donnée manque : jamais de niveau inventé.
+ */
+export function classifyNiveau({ net_edge_pp = null, pm_liquidity = null } = {}, thresholds = STRICT_THRESHOLDS) {
+  const liquidite = Number.isFinite(pm_liquidity) ? pm_liquidity : null;
+  if (liquidite !== null && liquidite < thresholds.minPmLiquidityForNiveauUsd) {
+    return Niveau.Limite;
+  }
+  const edge = Number.isFinite(net_edge_pp) ? net_edge_pp : null;
+  if (edge === null) return null;
+  if (edge >= thresholds.fortMinNetEdgePp) return Niveau.Fort;
+  if (edge >= thresholds.moyenMinNetEdgePp) return Niveau.Moyen;
+  return Niveau.Faible;
+}
+
+export function niveauLabel(niveau) {
+  return niveau === null || niveau === undefined ? 'Indisponible' : NIVEAU_LABELS[niveau] || 'Indisponible';
+}
+
 export const DEFAULT_PROPOSAL_PRESET = 'zero';
 
 export const STRICT_THRESHOLDS = Object.freeze({
   minNetEdgePp: 2.5,
   moderateNetEdgePp: 3.0,
   highNetEdgePp: 4.0,
+  // Paliers publics du Niveau (brief §4) — mêmes seuils que les paliers internes.
+  fortMinNetEdgePp: 4.0,
+  moyenMinNetEdgePp: 2.0,
   minBfVolume: 3000,
   moderateBfVolume: 8000,
   highBfVolume: 15000,
@@ -298,7 +345,7 @@ function evaluateSideCandidate(
     flowConfirmed;
 
   let tier = ConfidenceLevel.Low;
-  const minModEdge = Math.min(thresholds.moderateNetEdgePp, 2.0);
+  const minModEdge = Math.min(thresholds.moderateNetEdgePp, thresholds.moyenMinNetEdgePp);
   if (isHigh) {
     tier = ConfidenceLevel.High;
   } else if (netEdge >= minModEdge) {
@@ -369,6 +416,10 @@ function evaluateSideCandidate(
   const pmLiquidityWarning = pmLiq !== null && pmLiq < 500;
 
   const marketPriority = computeMarketPriority(mkt.market, side.label, direction);
+  const niveau = classifyNiveau(
+    { net_edge_pp: round1(netEdge), pm_liquidity: pmLiq },
+    thresholds
+  );
 
   return {
     candidate: {
@@ -382,6 +433,10 @@ function evaluateSideCandidate(
       tier,
       tier_rank: CONFIDENCE_RANK[tier],
       tier_label: CONFIDENCE_LABELS[tier],
+      // Niveau public calculé depuis net_edge_pp (jamais recalculé ailleurs).
+      niveau,
+      niveau_label: niveauLabel(niveau),
+      tier_niveau: CONFIDENCE_TO_NIVEAU[tier], // correspondance historique high/moderate/low
       confidence_score: confidenceScore,
       bf_pct: side.bf_pct,
       bf_odds: side.bf_odds,
