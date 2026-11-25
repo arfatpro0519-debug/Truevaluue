@@ -45,6 +45,7 @@ import {
   recordGapSnapshots,
 } from './src/apiV2.js';
 import { GapSnapshotsStore } from './src/gapSnapshots.js';
+import { TelegramAlerts } from './src/telegramAlerts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE_DIR = path.join(__dirname, 'site');
@@ -205,6 +206,28 @@ export function createApp(sourcesOrCfg = null) {
       reportError: (ok, operation, err) => calibration._recordPersistence?.(ok, operation, err),
     });
   sources.gapStore = gapStore;
+  // Alertes Telegram : mêmes réglages et abonnements que le reste de l'application.
+  const alerts = sources.alerts || new TelegramAlerts({ cfg, calibration });
+  sources.alerts = alerts;
+
+  // Déclenchement des alertes après chaque synchronisation (5.1), sans jamais
+  // exposer de promesse de gain. Sans bot token ou sans abonné, aucun appel réseau.
+  const runAlertTick = async () => {
+    try {
+      const [signals, configurations] = await Promise.all([
+        buildSignals({ scraper, polymarket, force: false, maxPmLookup: 28 }),
+        buildConfigurations({ scraper, polymarket, force: false, maxPmLookup: 28 }),
+      ]);
+      const ecarts = buildEcarts({ signals, configurations }).ecarts;
+      const sourcesStatus = buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore, calibration, gapStore });
+      return await alerts.evaluateAndSend({ ecarts, sourcesStatus });
+    } catch (err) {
+      console.error('Tick alertes Telegram impossible:', err?.message || err);
+      return { envoyees: 0, erreur: err?.message || String(err) };
+    }
+  };
+  sources.runAlertTick = runAlertTick;
+
   const app = express();
 
   app.disable('x-powered-by');
@@ -559,11 +582,17 @@ export function createApp(sourcesOrCfg = null) {
     ) {
       return sendError(req, res, 401, 'Signature webhook invalide.');
     }
+    const update = req.body || {};
+    // Les commandes /start, /alertes et /stop fonctionnent même si les paiements sont
+    // désactivés (PAYMENTS_ENABLED=0 par défaut).
+    const command = await alerts.handleUpdate(update);
+    if (command.handled) {
+      return sendJson(req, res, 200, { ok: true, command: command.command || null, error: command.error || null });
+    }
     if (!cfg.paymentsEnabled) {
       return sendError(req, res, 410, 'Le paiement est actuellement désactivé.');
     }
 
-    const update = req.body || {};
     if (update.pre_checkout_query && cfg.telegramBotToken) {
       try {
         await fetch(`https://api.telegram.org/bot${cfg.telegramBotToken}/answerPreCheckoutQuery`, {
@@ -821,6 +850,7 @@ export function createApp(sourcesOrCfg = null) {
         recorded_signals: recordedSignals,
         settlement,
         gap_snapshots: snapshots,
+        alertes: await runAlertTick(),
         signal_results: calibration.signalResultsReport({ minN: cfg.calibrationMinN }),
         ...calibration.report({ minN: cfg.calibrationMinN }),
       });
@@ -1213,6 +1243,32 @@ export function createApp(sourcesOrCfg = null) {
     );
   });
 
+  // Alertes Telegram : l'identité vient du token signé émis après validation
+  // serveur de initData (auth.js), jamais d'un paramètre client de confiance.
+  app.get('/api/v2/alertes', (req, res) => {
+    const userId = req.auth?.telegramUserId;
+    if (!userId) return sendError(req, res, 401, 'Authentification Telegram requise.');
+    const sub = alerts.getSubscription(userId);
+    return sendJson(req, res, 200, {
+      ok: true,
+      actif: Boolean(sub?.actif),
+      regles: sub?.rules || alerts.rules,
+      abonnement_souscrit: Boolean(calibration.getSubscription?.(userId)?.active),
+    });
+  });
+
+  app.post('/api/v2/alertes', (req, res) => {
+    const userId = req.auth?.telegramUserId;
+    if (!userId) return sendError(req, res, 401, 'Authentification Telegram requise.');
+    const actif = req.body?.actif === true || req.body?.actif === '1';
+    if (actif) {
+      const sub = alerts.subscribe(userId, req.body?.chat_id ?? null, req.body?.regles || {});
+      return sendJson(req, res, 200, { ok: true, actif: true, regles: sub?.rules || alerts.rules });
+    }
+    const removed = alerts.unsubscribe(userId);
+    return sendJson(req, res, 200, { ok: true, actif: false, desabonne: removed });
+  });
+
   /* ---- ASSETS STATIQUES & SPA ---- */
   app.get('/favicon.ico', (_req, res) => {
     res.status(204).end();
@@ -1299,6 +1355,7 @@ export async function startServer(
             if (Array.isArray(sigResult.all_signals) && sigResult.all_signals.length > 0) {
               sources.calibration.recordFromSignals(sigResult);
             }
+            await sources.runAlertTick?.();
             await sources.calibration.settle({
               espn: sources.espn,
               sportscore: sources.sportscore,
