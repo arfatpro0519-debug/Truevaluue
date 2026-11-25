@@ -10,6 +10,7 @@ import {
   evaluateFixtureRecommendations,
   PROPOSAL_PRESETS,
   resolveProposalThresholds,
+  STRICT_THRESHOLDS,
 } from './recommend.js';
 
 export const ONE_X_TWO_STATES = Object.freeze(['1', 'X', '2']);
@@ -65,7 +66,9 @@ export const VARIATION_LABELS = Object.freeze({
   retournement: 'Retournement',
 });
 
+// Toutes les constantes métier du moteur (brief §2.3). Aucune valeur en dur dans les fonctions.
 export const DEFAULT_CONFIG_THRESHOLDS = Object.freeze({
+  // Axes
   equilibreMaxPp: 4.0,
   faibleMaxPp: 12.0,
   modereeMaxPp: 24.0,
@@ -75,6 +78,26 @@ export const DEFAULT_CONFIG_THRESHOLDS = Object.freeze({
   reversalDropPct: 3.0,
   pmMoveMinPts: 3.0,
   pmSplitMinGapPp: 3.0,
+  // Concordance (anciens seuils 58 / 60 / 62 / 54)
+  lowGoalsFavMinPct: 58.0,
+  highGoalsFavMinPct: 60.0,
+  heavyFavoriteMinPct: 62.0,
+  bttsNoFavMinPct: 54.0,
+  // Variation : deltas de probabilité (2.0 / 5.0) et split (10.0)
+  favFlipMinProbDeltaPp: 2.0,
+  splitMinProbDeltaPp: 5.0,
+  splitMinDropPct: 10.0,
+  strongMoveMinProbDeltaPp: 2.0,
+  // Signaux mouvement : volume Betfair 500 € et delta prob. 2.0 pt
+  movementMinVolumeEur: 500,
+  movementMinProbDeltaPp: 2.0,
+  // Recherche Polymarket : fenêtre 72 h / 2 h passées, 28 candidats par défaut, 40 max
+  pmSearchFutureHours: 72,
+  pmSearchPastHours: 2,
+  pmLookupDefault: 28,
+  pmLookupMax: 40,
+  // Niveau « Limité » (brief §4) — sourcing unique depuis recommend.js
+  minPmLiquidityForNiveauUsd: STRICT_THRESHOLDS.minPmLiquidityForNiveauUsd,
 });
 
 export const SIGNAL_PRESETS = PROPOSAL_PRESETS;
@@ -355,25 +378,28 @@ function summarizeMarketAxis(marketKey, bfRow, pmMarket, thresholds) {
       currFav &&
       openFav !== currFav &&
       maxAbsDrop >= thresholds.stableMaxPct &&
-      maxAbsProbDelta >= 2.0;
-    const minSplitDropPct = Math.max(thresholds.reversalDropPct * 3.0, 10.0);
+      maxAbsProbDelta >= thresholds.favFlipMinProbDeltaPp;
+    const minSplitDropPct = Math.max(
+      thresholds.reversalDropPct * 3.0,
+      thresholds.splitMinDropPct
+    );
     const splitReversal =
       strongestDrop <= -minSplitDropPct &&
       strongestRise >= minSplitDropPct &&
-      maxAbsProbDelta >= 5.0;
+      maxAbsProbDelta >= thresholds.splitMinProbDeltaPp;
 
     if (favFlipped || splitReversal) {
       variationClass = VariationClass.Retournement;
       variationLabel = VARIATION_LABELS.retournement;
     } else if (movedSide && movedSide.drop_pct !== null && maxAbsDrop >= thresholds.stableMaxPct) {
       const d = movedSide.drop_pct;
-      if (d <= -thresholds.strongMovePct && movedSideAbsProb >= 2.0) {
+      if (d <= -thresholds.strongMovePct && movedSideAbsProb >= thresholds.strongMoveMinProbDeltaPp) {
         variationClass = VariationClass.BaisseForte;
         variationLabel = VARIATION_LABELS.baisse_forte;
       } else if (d < 0) {
         variationClass = VariationClass.BaisseFaible;
         variationLabel = VARIATION_LABELS.baisse_faible;
-      } else if (d >= thresholds.strongMovePct && movedSideAbsProb >= 2.0) {
+      } else if (d >= thresholds.strongMovePct && movedSideAbsProb >= thresholds.strongMoveMinProbDeltaPp) {
         variationClass = VariationClass.HausseForte;
         variationLabel = VARIATION_LABELS.hausse_forte;
       } else {
@@ -499,7 +525,7 @@ export function isIncoherentGoalsProfile(goals) {
   return goals?.quality_status === GOALS_QUALITY.Incoherent || goals?.status === 'atypique';
 }
 
-function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
+function analyzeConcordance(marketSnaps, bfGoals, pmGoals, thresholds = DEFAULT_CONFIG_THRESHOLDS) {
   const items = [];
   let convergences = 0;
   let neutrals = 0;
@@ -554,9 +580,17 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
   // 2. BTTS vs Profil de buts (G1..G4 ou O/U 2.5)
   // Un profil incohérent n'est pas une contradiction : c'est une donnée à écarter (2.1).
   if (sBtts?.favorite && (bfGoals.profile || sOu25?.favorite) && !isIncoherentGoalsProfile(bfGoals)) {
-    const isLowGoals = bfGoals.profile === 'G1' || (sOu25?.favorite === 'Under' && (sOu25?.favorite_pct ?? 0) >= 58);
-    const isHighGoals = bfGoals.profile === 'G4' || (sOu25?.favorite === 'Over' && (sOu25?.favorite_pct ?? 0) >= 60);
-    const hasHeavySideFav = Boolean(s1x2?.favorite && s1x2.favorite !== 'X' && (s1x2.favorite_pct ?? 0) >= 62);
+    const isLowGoals =
+      bfGoals.profile === 'G1' ||
+      (sOu25?.favorite === 'Under' && (sOu25?.favorite_pct ?? 0) >= thresholds.lowGoalsFavMinPct);
+    const isHighGoals =
+      bfGoals.profile === 'G4' ||
+      (sOu25?.favorite === 'Over' && (sOu25?.favorite_pct ?? 0) >= thresholds.highGoalsFavMinPct);
+    const hasHeavySideFav = Boolean(
+      s1x2?.favorite &&
+        s1x2.favorite !== 'X' &&
+        (s1x2.favorite_pct ?? 0) >= thresholds.heavyFavoriteMinPct
+    );
     if (isLowGoals && sBtts.favorite === 'Oui') {
       contradictions += 1;
       items.push({
@@ -566,7 +600,12 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
         pair: 'BTTS vs Profil buts',
         detail: `BTTS Oui favorisé (${sBtts.favorite_pct?.toFixed(1) ?? '—'} %) malgré un profil faible en buts (${bfGoals.profile || 'Under 2.5'}).`,
       });
-    } else if (!hasHeavySideFav && isHighGoals && sBtts.favorite === 'Non' && (sBtts.favorite_pct ?? 0) >= 54) {
+    } else if (
+      !hasHeavySideFav &&
+      isHighGoals &&
+      sBtts.favorite === 'Non' &&
+      (sBtts.favorite_pct ?? 0) >= thresholds.bttsNoFavMinPct
+    ) {
       contradictions += 1;
       items.push({
         status: 'contradiction',
@@ -810,7 +849,7 @@ export function analyzeFixtureConfiguration(
     .filter((m) => m.pm_change_1d_pts !== null)
     .sort((a, b) => Math.abs(b.pm_change_1d_pts) - Math.abs(a.pm_change_1d_pts))[0] || null;
 
-  const concordance = analyzeConcordance(marketSnaps, bfGoals, pmGoals);
+  const concordance = analyzeConcordance(marketSnaps, bfGoals, pmGoals, th);
 
   const dt = parseKickoff(fixture?.date);
   const kickoffPassed = Boolean(dt && dt.getTime() <= nowMs);
@@ -934,8 +973,10 @@ export async function collectFixturesAndQuotes({
   scraper,
   polymarket,
   force = false,
-  maxPmLookup = 28,
+  maxPmLookup = DEFAULT_CONFIG_THRESHOLDS.pmLookupDefault,
+  thresholds = DEFAULT_CONFIG_THRESHOLDS,
 } = {}) {
+  const th = resolveConfigThresholds(thresholds);
   const warnings = [];
   const settledArb = await mapWithConcurrency(ALL_MARKETS, 3, async (key) => {
     const reply = await scraper.fetch(key, force);
@@ -986,9 +1027,9 @@ export async function collectFixturesAndQuotes({
         const dt = parseKickoff(f.date);
         if (!dt) return true;
         const diffHours = (dt.getTime() - nowMs) / 3_600_000;
-        return diffHours >= -2 && diffHours <= 72;
+        return diffHours >= -th.pmSearchPastHours && diffHours <= th.pmSearchFutureHours;
       })
-      .slice(0, Math.min(40, Math.max(1, maxPmLookup)));
+      .slice(0, Math.min(th.pmLookupMax, Math.max(1, maxPmLookup)));
 
     await mapWithConcurrency(candidates, 4, async (f) => {
       const meta = { error: null };
@@ -1273,7 +1314,7 @@ export async function buildConfigurations({
   polymarket,
   calibration = null,
   force = false,
-  maxPmLookup = 28,
+  maxPmLookup = DEFAULT_CONFIG_THRESHOLDS.pmLookupDefault,
   thresholds = null,
 } = {}) {
   const { fixtures, quotesByKey, warnings } = await collectFixturesAndQuotes({
@@ -1281,6 +1322,7 @@ export async function buildConfigurations({
     polymarket,
     force,
     maxPmLookup,
+    thresholds,
   });
   const calibrationReport = calibration ? calibration.report({ limit: 500 }) : null;
   return buildConfigurationsFromData(fixtures, quotesByKey, {
@@ -1440,8 +1482,8 @@ export function buildSignalsFromData(
     // Mouvements & retournements Betfair (ouverture -> actuel) sur variations de probabilité significatives
     if (
       (config.axes.variation.has_reversal || config.axes.variation.has_strong_move) &&
-      (config.total_volume_bf || 0) >= 500 &&
-      Math.abs(config.axes.variation.prob_delta_pp ?? 0) >= 2.0
+      (config.total_volume_bf || 0) >= resolvedCfgTh.movementMinVolumeEur &&
+      Math.abs(config.axes.variation.prob_delta_pp ?? 0) >= resolvedCfgTh.movementMinProbDeltaPp
     ) {
       const v = config.axes.variation;
       const moveScore =
@@ -1571,7 +1613,7 @@ export async function buildSignals({
   scraper,
   polymarket,
   force = false,
-  maxPmLookup = 28,
+  maxPmLookup = DEFAULT_CONFIG_THRESHOLDS.pmLookupDefault,
   preset = DEFAULT_PROPOSAL_PRESET,
   thresholdOverrides = null,
   configThresholds = null,
@@ -1581,6 +1623,7 @@ export async function buildSignals({
     polymarket,
     force,
     maxPmLookup,
+    thresholds: configThresholds,
   });
   return buildSignalsFromData(fixtures, quotesByKey, {
     preset,

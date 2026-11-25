@@ -4,8 +4,10 @@ import test from 'node:test';
 import {
   buildConfigurationsFromData,
   buildSignalsFromData,
+  DEFAULT_CONFIG_THRESHOLDS,
   deriveGoalsProfile,
   GOALS_QUALITY,
+  resolveConfigThresholds,
 } from '../src/configurations.js';
 import { MarketKey } from '../src/market.js';
 
@@ -162,3 +164,48 @@ function ouBf(market, implied) {
 function pmMarket(outcomes) {
   return { liquidity: 4000, spread: 0.02, usable: true, outcomes };
 }
+
+test('2.3 les seuils 58/60/62/54, 2/5/10, 500, 28/40/72 h et 5 000 $ sont configurables', () => {
+  const t = DEFAULT_CONFIG_THRESHOLDS;
+  assert.equal(t.lowGoalsFavMinPct, 58);
+  assert.equal(t.highGoalsFavMinPct, 60);
+  assert.equal(t.heavyFavoriteMinPct, 62);
+  assert.equal(t.bttsNoFavMinPct, 54);
+  assert.equal(t.favFlipMinProbDeltaPp, 2);
+  assert.equal(t.splitMinProbDeltaPp, 5);
+  assert.equal(t.splitMinDropPct, 10);
+  assert.equal(t.movementMinVolumeEur, 500);
+  assert.equal(t.movementMinProbDeltaPp, 2);
+  assert.equal(t.pmLookupDefault, 28);
+  assert.equal(t.pmLookupMax, 40);
+  assert.equal(t.pmSearchFutureHours, 72);
+  assert.equal(t.pmSearchPastHours, 2);
+  assert.equal(t.minPmLiquidityForNiveauUsd, 5000);
+
+  assert.equal(resolveConfigThresholds({ lowGoalsFavMinPct: 70 }).lowGoalsFavMinPct, 70);
+  assert.equal(resolveConfigThresholds({ lowGoalsFavMinPct: -1 }).lowGoalsFavMinPct, 58);
+
+  // Comportement : G2 + Under 2.5 à 62 % + BTTS Oui -> contradiction avec le seuil 58,
+  // plus aucune avec un seuil relevé à 70.
+  const fixture = {
+    fixture_key: 'threshold_fixture',
+    home: 'A',
+    away: 'B',
+    league: 'L',
+    date: FUTURE,
+    total_volume_bf: 2000,
+    bf_markets: {
+      [MarketKey.OverUnder15]: ouBf(MarketKey.OverUnder15, [35, 0, 65]), // Over 1.5
+      [MarketKey.OverUnder25]: ouBf(MarketKey.OverUnder25, [62, 0, 38]), // Under 2.5 à 62 %
+      [MarketKey.OverUnder35]: ouBf(MarketKey.OverUnder35, [78, 0, 22]), // Under 3.5 -> G2
+      [MarketKey.Btts]: ouBf(MarketKey.Btts, [70, 0, 30]), // BTTS Oui
+    },
+  };
+  const def = buildConfigurationsFromData([fixture], new Map(), { nowMs: NOW });
+  assert.equal(def.rows[0].axes.concordance.causes.includes('btts_profil_buts'), true);
+  const tuned = buildConfigurationsFromData([fixture], new Map(), {
+    nowMs: NOW,
+    thresholds: { lowGoalsFavMinPct: 70 },
+  });
+  assert.equal(tuned.rows[0].axes.concordance.causes.includes('btts_profil_buts'), false);
+});

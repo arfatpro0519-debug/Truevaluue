@@ -33,6 +33,8 @@ export const STRICT_THRESHOLDS = Object.freeze({
   minPmLiquidity: 500,
   moderatePmLiquidity: 1000,
   highPmLiquidity: 2500,
+  // Niveau public (brief §4) : en dessous de 5 000 $ le niveau est « Limité ».
+  minPmLiquidityForNiveauUsd: 5000,
   maxSpreadPts: 6.0,
   moderateMaxSpreadPts: 4.0,
   highMaxSpreadPts: 3.0,
