@@ -1,0 +1,20 @@
+kind = "web"
+previewPath = "/"
+title = "Truevalue"
+version = "1.0.0"
+id = "truevalue-v2"
+description = "Analyse statistique des écarts Betfair × Polymarket (18+, aucun gain garanti)"
+
+[[services]]
+localPort = 8080
+name = "Truevalue"
+paths = ["/"]
+
+[services.development]
+run = "npm start"
+
+[services.production.run]
+args = ["npm", "start"]
+
+[services.production.health.startup]
+path = "/"
