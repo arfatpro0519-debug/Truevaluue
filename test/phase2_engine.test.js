@@ -79,3 +79,86 @@ test('2.1 un profil de buts impossible est donnees_incoherentes, hors contradict
   assert.equal(coherent.quality_report.donnees_incoherentes, 0);
   assert.equal(coherent.rows[0].signature.goals_profile, 'G1');
 });
+
+function pmOutcome(label, pct) {
+  return { label, novig_pct: pct, price: pct / 100, bid: (pct - 2) / 100, ask: (pct + 2) / 100, change_1d: 0 };
+}
+
+test('2.2 les désaccords Betfair × Polymarket sur plusieurs marchés ne comptent qu’une cause', () => {
+  const fixture = {
+    fixture_key: 'dedup_fixture',
+    home: 'Team A',
+    away: 'Team B',
+    league: 'Ligue 1',
+    country: 'fra',
+    date: FUTURE,
+    total_volume_bf: 20000,
+    bf_markets: {
+      [MarketKey.OneXTwo]: {
+        market: MarketKey.OneXTwo,
+        total_volume: 10000,
+        implied: [50, 20, 30],
+        coef: [2.0, 5.0, 3.33],
+        coef_new: [2.0, 5.0, 3.33],
+        drop: [0, 0, 0],
+      },
+      [MarketKey.Btts]: ouBf('btts', [70, 0, 30]),
+      [MarketKey.OverUnder15]: ouBf(MarketKey.OverUnder15, [62, 0, 38]),
+      [MarketKey.OverUnder25]: ouBf(MarketKey.OverUnder25, [65, 0, 35]),
+      [MarketKey.OverUnder35]: ouBf(MarketKey.OverUnder35, [78, 0, 22]),
+    },
+  };
+  const quote = {
+    slug: 'dedup_fixture',
+    url: 'https://polymarket.com/event/dedup-fixture',
+    liquidity: 12000,
+    volume: 20000,
+    markets: {
+      [MarketKey.OneXTwo]: pmMarket([pmOutcome('1', 30), pmOutcome('N', 20), pmOutcome('2', 50)]),
+      [MarketKey.Btts]: pmMarket([pmOutcome('Oui', 35), pmOutcome('Non', 65)]),
+      [MarketKey.OverUnder25]: pmMarket([pmOutcome('Under', 40), pmOutcome('Over', 60)]),
+    },
+  };
+
+  const cfg = buildConfigurationsFromData([fixture], new Map([[fixture.fixture_key, quote]]), {
+    nowMs: NOW,
+  });
+  const conc = cfg.rows[0].axes.concordance;
+  // Deux causes distinctes au total : BTTS/profil ET le désaccord BF×PM regroupé.
+  assert.equal(conc.causes.length, 2);
+  assert.ok(conc.causes.includes('betfair_polymarket'));
+  const bfPmItems = conc.items.filter((i) => i.cause === 'betfair_polymarket');
+  assert.equal(bfPmItems.length, 1);
+  assert.ok(bfPmItems[0].markets.length >= 3);
+  assert.equal(conc.contradictions, conc.causes.length);
+
+  const signals = buildSignalsFromData([fixture], new Map([[fixture.fixture_key, quote]]), {
+    preset: 'zero',
+    nowMs: NOW,
+  });
+  const contra = signals.configuration_signals.find((s) => s.category === 'contradiction');
+  assert.ok(contra);
+  assert.equal(contra.contradictions_count, 2);
+  assert.equal(contra.causes.length, 2);
+  const pmCause = contra.causes.find((c) => c.cause === 'betfair_polymarket');
+  assert.ok(pmCause);
+  assert.ok(pmCause.markets.length >= 3);
+});
+
+function ouBf(market, implied) {
+  const underFav = implied[0] > implied[2];
+  return {
+    market,
+    total_volume: 1000,
+    implied,
+    coef: [underFav ? 1.5 : 2.9, 0, underFav ? 2.9 : 1.5],
+    coef_new: [underFav ? 1.5 : 2.9, 0, underFav ? 2.9 : 1.5],
+    drop: [0, 0, 0],
+    volume: underFav ? [600, 0, 400] : [400, 0, 600],
+    share: underFav ? [60, 0, 40] : [40, 0, 60],
+  };
+}
+
+function pmMarket(outcomes) {
+  return { liquidity: 4000, spread: 0.02, usable: true, outcomes };
+}

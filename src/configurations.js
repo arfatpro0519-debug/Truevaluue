@@ -507,6 +507,10 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
   let unavailable = 0;
   let incoherent = 0;
 
+  // 2.2 Un même désaccord Betfair × Polymarket est une seule cause, peu importe le
+  // nombre de marchés (1X2, BTTS, chaque O/U, profil de buts) où il se manifeste.
+  const bfPmCauses = [];
+
   const snap = (k) => marketSnaps[k] || null;
   const s1x2 = snap(MarketKey.OneXTwo);
   const sBtts = snap(MarketKey.Btts);
@@ -523,6 +527,8 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
       contradictions += 1;
       items.push({
         status: 'contradiction',
+        cause: 'orientation_ft_ht',
+        markets: ['1x2', 'half-time'],
         pair: '1X2 FT vs Mi-temps',
         detail: `1X2 FT favorise ${s1x2.favorite} (${s1x2.favorite_pct?.toFixed(1) ?? '—'} %) tandis que Mi-temps favorise ${sHt.favorite} (${sHt.favorite_pct?.toFixed(1) ?? '—'} %).`,
       });
@@ -555,6 +561,8 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
       contradictions += 1;
       items.push({
         status: 'contradiction',
+        cause: 'btts_profil_buts',
+        markets: ['btts', 'profil_buts'],
         pair: 'BTTS vs Profil buts',
         detail: `BTTS Oui favorisé (${sBtts.favorite_pct?.toFixed(1) ?? '—'} %) malgré un profil faible en buts (${bfGoals.profile || 'Under 2.5'}).`,
       });
@@ -562,6 +570,8 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
       contradictions += 1;
       items.push({
         status: 'contradiction',
+        cause: 'btts_profil_buts',
+        markets: ['btts', 'profil_buts'],
         pair: 'BTTS vs Profil buts',
         detail: `BTTS Non favorisé (${sBtts.favorite_pct?.toFixed(1) ?? '—'} %) malgré un profil offensif (${bfGoals.profile || 'Over 2.5'}).`,
       });
@@ -612,6 +622,8 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
       contradictions += 1;
       items.push({
         status: 'contradiction',
+        cause: 'orientation_1x2_dnb',
+        markets: ['1x2', 'dnb'],
         pair: '1X2 vs DNB',
         detail: `1X2 favorise ${s1x2.favorite} mais DNB favorise ${sDnb.favorite}.`,
       });
@@ -626,6 +638,8 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
     contradictions += 1;
     items.push({
       status: 'contradiction',
+      cause: 'nul_profil_g4',
+      markets: ['1x2', 'profil_buts'],
       pair: '1X2 Nul vs G4',
       detail: 'Match nul favorisé en 1X2 avec profil très offensif G4 (Over 3.5 favorisé).',
     });
@@ -643,10 +657,9 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
     const m = snap(mKey);
     if (!m || !m.source_bf || !m.source_pm) continue;
     if (m.bf_pm_disagree) {
-      contradictions += 1;
-      items.push({
-        status: 'contradiction',
-        pair: `Betfair × Polymarket (${m.short})`,
+      bfPmCauses.push({
+        market: mKey,
+        short: m.short,
         detail: `Betfair favorise ${m.favorite} (${m.favorite_pct?.toFixed(1)} %) vs Polymarket ${m.pm_favorite} (${m.pm_favorite_pct?.toFixed(1)} %).`,
       });
     } else if (m.favorite && m.pm_favorite && m.favorite === m.pm_favorite) {
@@ -661,10 +674,9 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
     !isIncoherentGoalsProfile(pmGoals)
   ) {
     if (bfGoals.profile !== pmGoals.profile) {
-      contradictions += 1;
-      items.push({
-        status: 'contradiction',
-        pair: 'Profil buts Betfair × Polymarket',
+      bfPmCauses.push({
+        market: 'profil_buts',
+        short: 'Profil buts',
         detail: `Betfair classe ${bfGoals.profile} tandis que Polymarket classe ${pmGoals.profile}.`,
       });
     } else {
@@ -677,6 +689,21 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
     }
   }
 
+  // Une seule cause « Betfair × Polymarket » quelle que soit la largeur des désaccords.
+  if (bfPmCauses.length > 0) {
+    contradictions += 1;
+    items.push({
+      status: 'contradiction',
+      cause: 'betfair_polymarket',
+      markets: bfPmCauses.map((c) => c.market),
+      pair: 'Betfair × Polymarket',
+      detail: bfPmCauses.map((c) => `${c.short} : ${c.detail}`).join(' | '),
+      details: bfPmCauses.map((c) => c.detail),
+    });
+  }
+
+  const causes = [...new Set(items.filter((i) => i.status === 'contradiction').map((i) => i.cause))];
+
   let overallStatus = 'partiel';
   if (contradictions > 0 && convergences === 0) overallStatus = 'contradiction';
   else if (contradictions > 0) overallStatus = 'mixte';
@@ -688,6 +715,7 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
     convergences,
     neutrals,
     contradictions,
+    causes,
     unavailable,
     incoherent,
     items,
@@ -1457,6 +1485,12 @@ export function buildSignalsFromData(
     // Contradictions multi-marchés & désaccords Betfair × Polymarket
     if (config.axes.concordance.contradictions > 0) {
       const contras = config.axes.concordance.items.filter((i) => i.status === 'contradiction');
+      // 2.2 : une entrée = une cause distincte, avec la liste des marchés concernés.
+      const causes = contras.map((c) => ({
+        cause: c.cause,
+        markets: c.markets || [],
+        detail: c.detail,
+      }));
       const contraScore =
         52 +
         Math.min(20, contras.length * 8) +
@@ -1480,9 +1514,10 @@ export function buildSignalsFromData(
         pm_url: config.pm_url,
         total_volume_bf: config.total_volume_bf,
         pm_liquidity: config.pm_liquidity,
-        contradictions_count: contras.length,
-        title: `${contras.length} contradiction(s) : ${contras.map((c) => c.pair).join(' · ')}`,
+        contradictions_count: causes.length,
+        title: `${causes.length} cause(s) de désaccord : ${contras.map((c) => c.pair).join(' · ')}`,
         detail: contras.map((c) => c.detail).join(' | '),
+        causes,
         items: contras,
         score_sort: round2(contraScore),
         config_summary: config,
