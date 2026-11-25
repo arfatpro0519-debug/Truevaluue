@@ -1440,6 +1440,7 @@ export function buildSignalsFromData(
           tier: reco.tier,
           tier_rank: reco.tier_rank,
           tier_label: reco.tier_label,
+          side_label: reco.side_label || null,
           // Niveau public : réutilise le net_edge_pp et les paliers de recommend.js.
           niveau: reco.niveau ?? null,
           niveau_label: reco.niveau_label || 'Indisponible',

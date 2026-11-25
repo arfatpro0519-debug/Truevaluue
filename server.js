@@ -35,9 +35,21 @@ import { buildUserAgent, Scraper } from './src/scrape.js';
 import { competitionSlugs, SportScoreClient } from './src/sportscore.js';
 import * as th from './src/thresholds.js';
 
+import {
+  buildBilan,
+  buildEcarts,
+  buildEcartDetail,
+  buildLaboratoire,
+  buildMatchs,
+  buildSourcesStatus,
+  recordGapSnapshots,
+} from './src/apiV2.js';
+import { GapSnapshotsStore } from './src/gapSnapshots.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE_DIR = path.join(__dirname, 'site');
 const MODULES_DIR = path.join(SITE_DIR, 'modules');
+const LEGACY_DIR = path.join(__dirname, 'site-legacy');
 const GZIP_JSON_MIN_BYTES = 1024;
 const DEFAULT_SPORTSCORE_SLUGS = ['italian-serie-c', 'greek-super-league-2'];
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -184,6 +196,15 @@ export function createApp(sourcesOrCfg = null) {
     new CalibrationStore(
       path.resolve(process.cwd(), cfg.dataDir || 'data', 'observations.json')
     );
+  // Historique réel de l'écart (Phase 3.1) : partagé avec la sync de fond via `sources`.
+  const gapStore =
+    sources.gapStore ||
+    new GapSnapshotsStore({
+      db: calibration.db || null,
+      filePath: path.join(path.dirname(calibration.filePath), 'gap_snapshots.json'),
+      reportError: (ok, operation, err) => calibration._recordPersistence?.(ok, operation, err),
+    });
+  sources.gapStore = gapStore;
   const app = express();
 
   app.disable('x-powered-by');
@@ -210,7 +231,18 @@ export function createApp(sourcesOrCfg = null) {
   const sensitiveLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20 });
 
   app.use('/api', apiLimiter);
-  app.use(['/api/auth', '/api/billing', '/api/calibration/sync'], sensitiveLimiter);
+  app.use(['/api/auth', '/api/billing', '/api/v2', '/api/calibration/sync'], sensitiveLimiter);
+
+  // Les routes /api/* historiques restent intactes mais sont marquées dépréciées (§2.7).
+  app.use('/api', (req, res, next) => {
+    const sub = req.path || '';
+    if (!sub.startsWith('/v2/') && !sub.startsWith('/auth/') && !sub.startsWith('/billing/')) {
+      res.setHeader('Deprecation', 'true');
+      res.setHeader('Sunset', 'Wed, 31 Dec 2027 23:59:59 GMT');
+      res.setHeader('Link', '</api/v2/ecarts>; rel="successor-version"');
+    }
+    return next();
+  });
 
   // Auth middleware: vérifie le jeton Bearer uniquement en mémoire côté serveur
   app.use((req, _res, next) => {
@@ -779,6 +811,7 @@ export function createApp(sourcesOrCfg = null) {
           maxPmLookup: 28,
         }),
       ]);
+      const snapshots = recordGapSnapshots(sources, cmpResult.rows);
       const recorded = calibration.recordFromComparison(cmpResult.rows);
       const recordedSignals = calibration.recordFromSignals(sigResult);
       const settlement = await calibration.settle({ espn, sportscore, cfg });
@@ -787,6 +820,7 @@ export function createApp(sourcesOrCfg = null) {
         recorded,
         recorded_signals: recordedSignals,
         settlement,
+        gap_snapshots: snapshots,
         signal_results: calibration.signalResultsReport({ minN: cfg.calibrationMinN }),
         ...calibration.report({ minN: cfg.calibrationMinN }),
       });
@@ -1088,6 +1122,97 @@ export function createApp(sourcesOrCfg = null) {
     });
   });
 
+  /* ---- API v2 : surface publique, snake_case, aucune clé interne ---- */
+  const v2Configurations = () =>
+    buildConfigurations({ scraper, polymarket, force: false, maxPmLookup: 28 });
+  const v2Signals = () =>
+    buildSignals({ scraper, polymarket, force: false, maxPmLookup: 28 });
+
+  app.get('/api/v2/ecarts', async (req, res) => {
+    try {
+      const [signals, configurations] = await Promise.all([v2Signals(), v2Configurations()]);
+      return sendJson(
+        req,
+        res,
+        200,
+        buildEcarts({ signals, configurations, type: String(req.query?.type || 'all') })
+      );
+    } catch (err) {
+      console.error('Erreur /api/v2/ecarts:', err);
+      return sendError(req, res, 502, 'Écarts momentanément indisponibles.');
+    }
+  });
+
+  app.get('/api/v2/ecarts/:id', async (req, res) => {
+    try {
+      const [signals, configurations] = await Promise.all([v2Signals(), v2Configurations()]);
+      const detail = buildEcartDetail({
+        id: req.params.id,
+        signals,
+        configurations,
+        gapStore,
+      });
+      if (!detail) return sendError(req, res, 404, 'Écart introuvable.');
+      return sendJson(req, res, 200, detail);
+    } catch (err) {
+      console.error('Erreur /api/v2/ecarts/:id:', err);
+      return sendError(req, res, 502, 'Détail de l’écart momentanément indisponible.');
+    }
+  });
+
+  app.get('/api/v2/matchs', async (req, res) => {
+    try {
+      const configurations = await v2Configurations();
+      return sendJson(req, res, 200, buildMatchs({ configurations, q: req.query?.q || '' }));
+    } catch (err) {
+      console.error('Erreur /api/v2/matchs:', err);
+      return sendError(req, res, 502, 'Matchs momentanément indisponibles.');
+    }
+  });
+
+  app.get('/api/v2/bilan', (req, res) => {
+    try {
+      const report = calibration.report({ limit: 500, minN: cfg.calibrationMinN });
+      return sendJson(req, res, 200, buildBilan({ calibrationReport: report }));
+    } catch (err) {
+      console.error('Erreur /api/v2/bilan:', err);
+      return sendError(req, res, 502, 'Bilan momentanément indisponible.');
+    }
+  });
+
+  app.get('/api/v2/laboratoire', async (req, res) => {
+    try {
+      const configurations = await v2Configurations();
+      const report = calibration.report({ limit: 500, minN: cfg.calibrationMinN });
+      return sendJson(
+        req,
+        res,
+        200,
+        buildLaboratoire({ configurations, calibrationReport: report, intensity: req.query?.intensity })
+      );
+    } catch (err) {
+      console.error('Erreur /api/v2/laboratoire:', err);
+      return sendError(req, res, 502, 'Laboratoire momentanément indisponible.');
+    }
+  });
+
+  app.get('/api/v2/sources/status', (req, res) => {
+    return sendJson(
+      req,
+      res,
+      200,
+      buildSourcesStatus({
+        cfg,
+        scraper,
+        polymarket,
+        espn,
+        sportscore,
+        calibration,
+        gapStore,
+      })
+    );
+  });
+
   /* ---- ASSETS STATIQUES & SPA ---- */
   app.get('/favicon.ico', (_req, res) => {
     res.status(204).end();
@@ -1168,6 +1293,7 @@ export async function startServer(
               }),
             ]);
             if (cmpResult.rows.length > 0) {
+              recordGapSnapshots(sources, cmpResult.rows);
               sources.calibration.recordFromComparison(cmpResult.rows);
             }
             if (Array.isArray(sigResult.all_signals) && sigResult.all_signals.length > 0) {
