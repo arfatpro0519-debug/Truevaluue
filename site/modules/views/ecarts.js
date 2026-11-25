@@ -29,11 +29,19 @@ function card(c) {
     ? '<span class="tag wa">Mouvement Betfair</span>'
     : ct
     ? '<span class="tag ng">Contradiction</span>'
+    : c.type === 'conv'
+    ? '<span class="tag ok">Convergence</span>'
+    : c.type === 'flow'
+    ? '<span class="tag ac">Flux / retards</span>'
     : tag(c.niveau);
   const detail = mv
     ? esc(c.variation?.classe || 'mouvement') + ' · ouverture → actuel'
     : ct
     ? `${(c.causes || []).length} cause(s) de désaccord`
+    : c.type === 'conv'
+    ? `${c.nombre_convergences ?? 0} accord(s) entre Betfair et Polymarket`
+    : c.type === 'flow'
+    ? `${esc(c.flux?.type || 'flux')} · ${esc(c.flux?.detail || c.issue || '')}`
     : esc(c.issue || c.marche || '');
   const age = Math.max(
     Number.isFinite(c.fraicheur?.betfair_age_s) ? c.fraicheur.betfair_age_s : 0,
@@ -43,10 +51,10 @@ function card(c) {
     <div class="r"><span class="sm">${star}${esc(c.match?.league || 'Football')} · ${time(c.match?.kickoff)}</span>${badge}</div>
     <div class="mt">${esc(c.match?.home)} – ${esc(c.match?.away)}</div>
     <div class="sm" style="margin-bottom:6px">${detail}${!mv && !ct ? ` · ${esc(c.marche || '')}` : ''}</div>
-    ${mv || ct ? '' : bar('Betfair', c.betfair_pct) + bar('Polymarket', c.polymarket_pct, 'var(--pm)')}
+    ${mv || ct || c.type === 'conv' || c.type === 'flow' ? '' : bar('Betfair', c.betfair_pct) + bar('Polymarket', c.polymarket_pct, 'var(--pm)')}
     <div class="ft">
-      <span>Écart <b>${f1(c.ecart_pts)} pts</b></span>
-      <span>Valeur nette <b>${f1(c.valeur_nette_pts)} pts</b></span>
+      <span>Écart <b>${c.type === 'conv' || c.type === 'flow' ? '—' : `${f1(c.ecart_pts)} pts`}</b></span>
+      <span>Valeur nette <b>${c.type === 'conv' || c.type === 'flow' ? '—' : `${f1(c.valeur_nette_pts)} pts`}</b></span>
       <span>Liquidité <b>${int(c.liquidite_polymarket_usd)} $</b></span>
       ${fresh(age, state.data.sources?.seuil_retard_s ?? 600)}
     </div></button>`;
@@ -74,7 +82,7 @@ export function renderEcarts() {
         (b.liquidite_polymarket_usd ?? 0) - (a.liquidite_polymarket_usd ?? 0)
   );
   const chips = [
-    ['all', 'Tous'], ['net', 'Écarts nets'], ['mv', 'Mouvements Betfair'], ['ct', 'Contradictions'],
+    ['all', 'Tous'], ['net', 'Écarts nets'], ['mv', 'Mouvements Betfair'], ['ct', 'Contradictions'], ['conv', 'Convergences'], ['flow', 'Flux & retards'],
   ];
   return (
     onboarding() +
@@ -108,7 +116,11 @@ function spark(points) {
 export function renderDetail(d) {
   const mv = d.type === 'mv';
   const ct = d.type === 'ct';
-  const phrase = mv
+  const phrase = d.type === 'conv'
+    ? `Betfair et Polymarket désignent la même issue comme favorite sur ${d.nombre_convergences ?? (d.convergences || []).length} axe(s). C’est un accord d’analyse, pas un écart exploitable.`
+    : d.type === 'flow'
+    ? `${esc(d.flux?.detail || 'Flux Betfair × Polymarket')} · direction : ${esc(d.flux?.direction || '—')}. Ce signal n’a pas de cote : aucun rendement en unités n’est calculé.`
+    : mv
     ? `Variation Betfair depuis l’ouverture : ${f1(d.variation?.delta_prob_pts)} pts. Le libellé « 24 h » ne s’applique qu’à Polymarket.`
     : ct
     ? `${(d.causes || []).map((c) => esc(c.cause)).join(', ')} : les marchés concernés sont listés ci-dessous.`
@@ -119,6 +131,10 @@ export function renderDetail(d) {
   const causes = ct
     ? `<div class="cd"><div class="mt">Causes dédoublonnées</div>${(d.causes || [])
         .map((c) => `<div class="rw"><div><b>${esc(c.cause)}</b><div class="sm">${(c.markets || []).map(esc).join(', ')}</div></div></div>`)
+        .join('')}</div>`
+    : d.type === 'conv'
+    ? `<div class="cd"><div class="mt">Accords Betfair × Polymarket</div>${(d.convergences || [])
+        .map((c) => `<div class="rw" style="display:block"><b>${esc(c.cause)}</b><div class="sm">${esc(c.detail)}</div></div>`)
         .join('')}</div>`
     : '';
   const followed = state.followed.has(d.id);

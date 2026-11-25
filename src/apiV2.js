@@ -37,7 +37,14 @@ function cardFromSignal(s, row, showPmLinks = true) {
   const spread = Number.isFinite(reco.pm_spread_pts) ? reco.pm_spread_pts : null;
   const net = Number.isFinite(s.net_edge_pp) ? s.net_edge_pp : null;
   const ecart = net !== null && spread !== null ? round1(net + spread) : null;
-  const type = s.category === 'movement' ? 'mv' : s.category === 'contradiction' ? 'ct' : 'net';
+  const type =
+    s.category === 'movement'
+      ? 'mv'
+      : s.category === 'contradiction'
+      ? 'ct'
+      : s.category === 'flow'
+      ? 'flow'
+      : 'net';
   const card = {
     id: s.id,
     type,
@@ -71,6 +78,13 @@ function cardFromSignal(s, row, showPmLinks = true) {
   if (type === 'ct') {
     card.causes = Array.isArray(s.causes) ? s.causes : [];
   }
+  if (type === 'flow') {
+    card.flux = {
+      type: s.signal_type ?? null,
+      direction: s.direction ?? null,
+      detail: s.detail ?? null,
+    };
+  }
   return card;
 }
 
@@ -80,13 +94,52 @@ function indexRows(configurations) {
   );
 }
 
+// Les convergences sont calculées par le moteur (axes.concordance) mais n'étaient
+// pas exposées : ce sont des accords Betfair × Polymarket sur un même marché,
+// pas des écarts. Elles redeviennent visibles comme carte d'analyse (type `conv`).
+export function buildConvergenceCards(configurations) {
+  const rows = Array.isArray(configurations?.rows) ? configurations.rows : [];
+  const cards = [];
+  for (const row of rows) {
+    const items = (row.axes?.concordance?.items || []).filter((i) => i.status === 'convergence');
+    if (items.length === 0) continue;
+    const agree = (row.markets || []).filter(
+      (m) => m.source_bf && m.source_pm && m.favorite && m.favorite === m.pm_favorite
+    );
+    const m = agree[0] || null;
+    cards.push({
+      id: `conv::${row.fixture_key}`,
+      type: 'conv',
+      fixture_key: row.fixture_key,
+      match: matchInfo(row),
+      marche: m?.short || null,
+      issue: m?.favorite || null,
+      betfair_pct: Number.isFinite(m?.favorite_pct) ? round1(m.favorite_pct) : null,
+      polymarket_pct: Number.isFinite(m?.pm_favorite_pct) ? round1(m.pm_favorite_pct) : null,
+      ecart_pts: null,
+      spread_pts: null,
+      valeur_nette_pts: null,
+      niveau: null,
+      niveau_label: 'Non applicable',
+      liquidite_polymarket_usd: Number.isFinite(row.pm_liquidity) ? row.pm_liquidity : null,
+      volume_betfair_eur: Number.isFinite(row.total_volume_bf) ? row.total_volume_bf : null,
+      fraicheur: freshness(row),
+      pm_url: null,
+      convergences: items.map((i) => ({ cause: i.cause || i.pair, detail: i.detail })),
+      nombre_convergences: items.length,
+    });
+  }
+  return cards;
+}
+
 export function buildEcarts({ signals, configurations, type = 'all', showPmLinks = true } = {}) {
   const byKey = indexRows(configurations);
   const all = Array.isArray(signals?.all_signals) ? signals.all_signals : [];
-  const wanted = ['all', 'net', 'mv', 'ct'].includes(type) ? type : 'all';
-  const cards = all
-    .map((s) => cardFromSignal(s, byKey.get(s.fixture_key), showPmLinks))
-    .filter((c) => wanted === 'all' || c.type === wanted);
+  const wanted = ['all', 'net', 'mv', 'ct', 'conv', 'flow'].includes(type) ? type : 'all';
+  const cards = [
+    ...all.map((s) => cardFromSignal(s, byKey.get(s.fixture_key), showPmLinks)),
+    ...buildConvergenceCards(configurations),
+  ].filter((c) => wanted === 'all' || c.type === wanted);
   // Tri public : valeur nette décroissante puis liquidité (brief 2.4).
   cards.sort(
     (a, b) =>
@@ -104,10 +157,13 @@ export function buildEcarts({ signals, configurations, type = 'all', showPmLinks
 export function buildEcartDetail({ id, signals, configurations, gapStore, showPmLinks = true } = {}) {
   const byKey = indexRows(configurations);
   const all = Array.isArray(signals?.all_signals) ? signals.all_signals : [];
-  const s = all.find((item) => item.id === id) || null;
-  if (!s) return null;
-  const row = byKey.get(s.fixture_key) || null;
-  const card = cardFromSignal(s, row, showPmLinks);
+  const signal = all.find((item) => item.id === id) || null;
+  const convergence = signal
+    ? null
+    : buildConvergenceCards(configurations).find((c) => c.id === id) || null;
+  if (!signal && !convergence) return null;
+  const card = convergence || cardFromSignal(signal, byKey.get(signal.fixture_key), showPmLinks);
+  const row = byKey.get(card.fixture_key || signal?.fixture_key) || null;
   const markets = (row?.markets || []).map((m) => ({
     marche: m.short || m.market,
     issue: m.favorite || null,
@@ -116,10 +172,10 @@ export function buildEcartDetail({ id, signals, configurations, gapStore, showPm
     volume_betfair_eur: Number.isFinite(m.volume_bf) ? m.volume_bf : null,
     liquidite_polymarket_usd: Number.isFinite(m.liquidity_pm) ? m.liquidity_pm : null,
   }));
-  const market = s.market || s.market_short || '1x2';
-  const side = s.side_label || null;
+  const market = signal?.market || signal?.market_short || card.marche || '1x2';
+  const side = signal?.side_label || card.issue || null;
   const historique = gapStore
-    ? gapStore.series(s.fixture_key, market, side, { limit: 40 })
+    ? gapStore.series(signal?.fixture_key || card.fixture_key, market, side, { limit: 40 })
     : [];
   return {
     ok: true,
@@ -219,46 +275,88 @@ export function buildLaboratoire({ configurations, calibrationReport, intensity 
     if (!o.signature_code) continue;
     let bucket = bySig.get(o.signature_code);
     if (!bucket) {
-      bucket = { n: 0, k: 0, probSum: 0, probN: 0 };
+      bucket = { n: 0, k: 0, probSum: 0, probN: 0, min: null, max: null };
       bySig.set(o.signature_code, bucket);
+    }
+    const date = String(o.date || o.settled_at || o.captured_at || '').slice(0, 10);
+    if (date) {
+      if (!bucket.min || date < bucket.min) bucket.min = date;
+      if (!bucket.max || date > bucket.max) bucket.max = date;
     }
     if (o.status === 'settled') {
       bucket.n += 1;
       if (o.bf_top_won === true) bucket.k += 1;
     }
-    const p = Number.isFinite(o.bf_pct) ? o.bf_pct : Number.isFinite(o.bf_top_pct) ? o.bf_top_pct : null;
+    // La probabilité du marché est celle du favori Betfair sur l'issue observée.
+    const sides = Array.isArray(o.sides) ? o.sides : [];
+    const favProb = sides
+      .map((s) => (Number.isFinite(s.bf_pct) ? s.bf_pct : null))
+      .filter((p) => p !== null)
+      .sort((a, b) => b - a)[0] ?? null;
+    const p = favProb ?? (Number.isFinite(o.bf_pct) ? o.bf_pct : null);
     if (p !== null) {
       bucket.probSum += p;
       bucket.probN += 1;
     }
   }
 
+  // Union des signatures : live complètes, live partielles ET historique réglé.
+  // Une signature historique partielle (ex. « 2 | Oui | ? | G4 ») reste observable.
+  const live = new Map();
   const catalog = Array.isArray(configurations?.catalog_72) ? configurations.catalog_72 : [];
+  for (const s of catalog) {
+    if ((s.count || 0) === 0) continue;
+    live.set(s.code, {
+      n_regles: s.count || 0,
+      dominant_intensity: s.dominant_intensity || null,
+      contradictions: s.contradictions || 0,
+      convergences: s.convergences || 0,
+      complet: true,
+    });
+  }
+  for (const p of Array.isArray(configurations?.partial_signatures) ? configurations.partial_signatures : []) {
+    if (live.has(p.code)) continue;
+    live.set(p.code, {
+      n_regles: p.count || 0,
+      dominant_intensity: null,
+      contradictions: p.contradictions || 0,
+      convergences: 0,
+      complet: false,
+    });
+  }
+  for (const code of bySig.keys()) {
+    if (!live.has(code)) {
+      live.set(code, { n_regles: 0, dominant_intensity: null, contradictions: 0, convergences: 0, complet: false });
+    }
+  }
+
   const intensityFilter = ['all', 'equilibre', 'faible', 'moderee', 'forte', 'extreme'].includes(intensity)
     ? intensity
     : 'all';
-  const signatures = catalog
-    .filter((s) => (s.count || 0) > 0)
-    .filter((s) => intensityFilter === 'all' || String(s.dominant_intensity || '').toLocaleLowerCase('fr').includes(intensityFilter))
-    .map((s) => {
-      const cal = bySig.get(s.code) || { n: 0, k: 0, probSum: 0, probN: 0 };
+  const signatures = [...live.entries()]
+    .map(([code, info]) => {
+      const cal = bySig.get(code) || { n: 0, k: 0, probSum: 0, probN: 0, min: null, max: null };
       const [icLower, icUpper] = wilsonInterval(cal.k, cal.n);
       return {
-        code: s.code,
+        code,
         n_matchs: cal.n,
-        n_regles: s.count ?? 0,
-        k_favori_gagnant: cal.k ?? 0,
+        n_regles: info.n_regles,
+        k_favori_gagnant: cal.k,
         taux_confirmation_pct: cal.n > 0 ? round1((cal.k / cal.n) * 100) : null,
         ic95_pct: [icLower, icUpper],
         probabilite_marche_pct: cal.probN > 0 ? round1(cal.probSum / cal.probN) : null,
-        intensite_dominante: s.dominant_intensity ?? null,
-        contradictions: s.contradictions ?? 0,
-        periode: configurations?.period || null,
+        intensite_dominante: info.dominant_intensity,
+        contradictions: info.contradictions,
+        convergences: info.convergences,
+        periode: cal.min ? { min_date: cal.min, max_date: cal.max } : configurations?.period || null,
+        complet: info.complet,
         sample_warning: cal.n < MIN_SAMPLE ? 'échantillon trop faible' : null,
         verdict: cal.n < MIN_SAMPLE ? null : 'À étudier : la règle reste à valider sur plus de matchs.',
       };
     })
-    .sort((a, b) => b.n_matchs - a.n_matchs || a.code.localeCompare(b.code));
+    .filter((s) => s.n_matchs > 0 || s.n_regles > 0)
+    .filter((s) => intensityFilter === 'all' || String(s.intensite_dominante || '').toLocaleLowerCase('fr').includes(intensityFilter))
+    .sort((a, b) => b.n_matchs - a.n_matchs || b.n_regles - a.n_regles || a.code.localeCompare(b.code));
 
   const quality = configurations?.quality_report || {};
   return {
@@ -268,7 +366,7 @@ export function buildLaboratoire({ configurations, calibrationReport, intensity 
     couverture: configurations?.summary?.block_coverage || {},
     seuils_intensite: configurations?.thresholds || {},
     intense_filtre: intensityFilter,
-    signatures_observees: signatures.filter((s) => s.n_regles > 0).length,
+    signatures_observees: signatures.length,
     signatures_possibles: 72,
     matchs_incomplets: configurations?.summary?.partial_signatures ?? 0,
     matchs_incoherents: quality.donnees_incoherentes ?? 0,

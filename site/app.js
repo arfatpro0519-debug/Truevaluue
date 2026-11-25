@@ -122,6 +122,7 @@ function glossary() {
     ['Intensité', 'Écart entre le favori et le second d’un marché : équilibre, faible, modérée, forte, extrême.'],
     ['Signature', 'Combinaison des favoris de 4 blocs : résultat, BTTS, mi-temps, profil de buts. 72 combinaisons.'],
     ['Confirmé / Infirmé / Remboursé', 'Issue du signal après le score final. Les signaux ne sont pas des paris.'],
+    ['Convergence', 'Betfair et Polymarket désignent la même issue comme favorite sur un marché : accord d’analyse, pas un écart exploitable.'],
     ['Score de Brier', 'Mesure de précision d’une probabilité après le match. Plus bas = plus précis.'],
   ];
   openSheet(`<div class="mt">Glossaire</div>${rows.map(([t, d]) => `<div class="rw" style="display:block"><b>${esc(t)}</b><div class="sm">${esc(d)}</div></div>`).join('')}${FOOT}`);

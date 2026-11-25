@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { createApp } from '../server.js';
-import { buildEcarts } from '../src/apiV2.js';
+import { buildEcarts, buildLaboratoire } from '../src/apiV2.js';
 import { CalibrationStore } from '../src/calibration.js';
 import { MarketKey } from '../src/market.js';
 
@@ -107,13 +107,13 @@ test('Phase 3 : les 6 routes v2 répondent au contrat sans clé interne', async 
       for (const forbidden of ['sort_key', 'score_sort', 'interest_score', 'confidence_score', 'recommendation', 'score']) {
         assert.equal(Object.hasOwn(c, forbidden), false, `${forbidden} exposé`);
       }
-      assert.ok(['net', 'mv', 'ct'].includes(c.type));
+      assert.ok(['net', 'mv', 'ct', 'conv', 'flow'].includes(c.type));
       assert.ok(Object.hasOwn(c, 'valeur_nette_pts'));
       assert.ok(Object.hasOwn(c, 'niveau'));
       assert.ok(Object.hasOwn(c, 'fraicheur'));
     }
 
-    for (const type of ['net', 'mv', 'ct', 'inconnu']) {
+    for (const type of ['net', 'mv', 'ct', 'conv', 'flow', 'inconnu']) {
       const r = await fetch(`${base}/api/v2/ecarts?type=${type}`).then((x) => x.json());
       assert.equal(r.ok, true);
       assert.equal(r.type, type === 'inconnu' ? 'all' : type);
@@ -168,6 +168,100 @@ test('Phase 3 : les 6 routes v2 répondent au contrat sans clé interne', async 
     assert.ok(status.persistance);
     assert.ok(status.snapshots);
   });
+});
+
+test('Convergences : accord Betfair × Polymarket exposé comme carte d’analyse', () => {
+  const configurations = {
+    rows: [
+      {
+        fixture_key: 'a-b',
+        home: 'A',
+        away: 'B',
+        league: 'L',
+        date: '2026-11-27T19:00:00Z',
+        pm_liquidity: 6000,
+        total_volume_bf: 10000,
+        markets: [
+          {
+            market: '1x2',
+            short: '1X2',
+            source_bf: true,
+            source_pm: true,
+            favorite: '1',
+            pm_favorite: '1',
+            favorite_pct: 55,
+            pm_favorite_pct: 54,
+            age_seconds: 10,
+          },
+        ],
+        axes: {
+          concordance: {
+            items: [{ status: 'convergence', pair: 'Betfair × Polymarket (1X2)', detail: 'Même favori 1' }],
+          },
+        },
+      },
+    ],
+  };
+  const cards = buildEcarts({ signals: { all_signals: [] }, configurations });
+  assert.ok(cards.ecarts.some((c) => c.type === 'conv'));
+  const conv = cards.ecarts.find((c) => c.type === 'conv');
+  assert.equal(conv.betfair_pct, 55);
+  assert.equal(conv.polymarket_pct, 54);
+  assert.equal(conv.valeur_nette_pts, null);
+  assert.equal(conv.niveau_label, 'Non applicable');
+  assert.equal(buildEcarts({ signals: { all_signals: [] }, configurations, type: 'conv' }).total, 1);
+  assert.equal(buildEcarts({ signals: { all_signals: [] }, configurations, type: 'net' }).total, 0);
+});
+
+test('Flux & retards : les signaux sans cote restent distincts des écarts nets', () => {
+  const signals = {
+    all_signals: [
+      {
+        id: 'flow::a-b::1x2::lag_pm',
+        category: 'flow',
+        signal_type: 'lag_pm',
+        fixture_key: 'a-b',
+        home: 'A',
+        away: 'B',
+        league: 'L',
+        date: '2026-11-27T19:00:00Z',
+        market_short: '1X2',
+        side_label: '1',
+        direction: 'buy_pm',
+        detail: 'Retard Polymarket sur 1X2',
+        net_edge_pp: 3,
+        pm_liquidity: 6000,
+        total_volume_bf: 9000,
+        niveau: 'moyen',
+        niveau_label: 'Moyen',
+      },
+    ],
+  };
+  const cards = buildEcarts({ signals }).ecarts;
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].type, 'flow');
+  assert.equal(cards[0].flux.type, 'lag_pm');
+  assert.equal(cards[0].flux.direction, 'buy_pm');
+  assert.equal(cards[0].niveau, 'moyen');
+  assert.equal(buildEcarts({ signals, type: 'flow' }).total, 1);
+  assert.equal(buildEcarts({ signals, type: 'net' }).total, 0);
+});
+
+test('Laboratoire : les signatures réglées historiques apparaissent même si elles sont partielles', () => {
+  const report = {
+    observations: [
+      { signature_code: '2 | Oui | ? | G4', status: 'settled', date: '2026-11-24 17:45:00', bf_top_won: true, sides: [{ label: '2', bf_pct: 42.7 }] },
+      { signature_code: '2 | Oui | ? | G4', status: 'settled', date: '2026-11-25 17:45:00', bf_top_won: false, sides: [{ label: '2', bf_pct: 44.1 }] },
+    ],
+  };
+  const lab = buildLaboratoire({ configurations: { catalog_72: [], partial_signatures: [] }, calibrationReport: report });
+  assert.equal(lab.signatures.length, 1);
+  assert.equal(lab.signatures[0].code, '2 | Oui | ? | G4');
+  assert.equal(lab.signatures[0].n_matchs, 2);
+  assert.equal(lab.signatures[0].k_favori_gagnant, 1);
+  assert.equal(lab.signatures[0].taux_confirmation_pct, 50);
+  assert.equal(lab.signatures[0].probabilite_marche_pct, 43.4);
+  assert.deepEqual(lab.signatures[0].ic95_pct[0] < 50, true);
 });
 
 test('Phase 6 : SHOW_PM_LINKS=0 retire les liens Polymarket de l’API v2', () => {

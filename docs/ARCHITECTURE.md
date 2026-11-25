@@ -16,7 +16,7 @@ ESPN / SportScore ─────────┘                         │    
 1. `collectFixturesAndQuotes()` (dans `configurations.js`) interroge Arbworld par marché et recherche les cotations Polymarket dans une fenêtre configurable (`pmSearchFutureHours`, `pmSearchPastHours`, `pmLookupMax`).
 2. `analyzeFixtureConfiguration()` produit 4 axes (orientation, intensité, variation **ouverture → actuel**, concordance) et une signature parmi 72.
 3. `evaluateFixtureRecommendations()` (`recommend.js`) calcule une seule fois `net_edge_pp` (valeur nette = écart − spread) et dérive le **Niveau** : Fort ≥ 4, Moyen ≥ 2, Faible < 2, **Limité** sous 5 000 $ de liquidité Polymarket. `high/moderate/low` ne sont que des paliers internes (`CONFIDENCE_TO_NIVEAU`).
-4. `buildSignalsFromData()` trie la liste publique par valeur nette décroissante puis liquidité. Les clés `sort_key`/alias v1 `interest_score`/`score_sort` ne sortent jamais de l’API v2.
+4. `buildSignalsFromData()` produit quatre familles de signaux : écarts nets (`executable`), flux/retards (`flow`), mouvements Betfair (`movement`) et contradictions (`contradiction`). Les **convergences** (accord Betfair × Polymarket sur le même favori d’un marché) sont calculées par `analyzeConcordance()` et exposées comme cartes `conv` sans valeur nette. La liste publique est triée par valeur nette décroissante puis liquidité. Les clés `sort_key`/alias v1 `interest_score`/`score_sort` ne sortent jamais de l’API v2.
 5. À chaque synchronisation (`POST /api/calibration/sync` et tâche de fond), `recordGapSnapshots()` écrit un point réel par issue dans `gap_snapshots` (purge à 7 jours) ; le mini-graphique de la fiche détail lit cette table, sans courbe simulée.
 6. `calibration.js` enregistre les observations, règle les matchs via ESPN/SportScore et calcule Brier, taux de confirmation (avec n) et rendement théorique (avec `roi_n`).
 
@@ -35,11 +35,11 @@ Migration rejouable : `_migrateObservations()` ajoute `first_seen`, `last_pre_ki
 
 | Route | Contenu |
 |---|---|
-| `GET /api/v2/ecarts?type=all\|net\|mv\|ct` | Cartes : match, marché, issue, probabilités, écart, spread, valeur nette, niveau, liquidité, volume, fraîcheur, `pm_url` (si `SHOW_PM_LINKS`) |
+| `GET /api/v2/ecarts?type=all\|net\|mv\|ct\|conv\|flow` | Cartes : match, marché, issue, probabilités, écart, spread, valeur nette, niveau, liquidité, volume, fraîcheur, `pm_url` (si `SHOW_PM_LINKS`). Types d'analyse : `net` écarts nets, `mv` mouvements Betfair, `ct` contradictions, `conv` accords Betfair × Polymarket sur un même marché, `flow` retards/flux sans cote (aucun rendement en unités). |
 | `GET /api/v2/ecarts/:id` | Détail : toutes les issues, causes dédoublonnées, 4 mesures, historique réel `gap_snapshots` |
 | `GET /api/v2/matchs?q=` | Matchs avec `has_betfair` / `has_polymarket` |
 | `GET /api/v2/bilan` | Brier + n, fiabilité par type (n, taux de confirmation, `sample_warning` sous 30), rendement théorique + `roi_n`, derniers résultats Confirmé/Infirmé/Remboursé |
-| `GET /api/v2/laboratoire?intensity=` | Par signature : n réglés, n règles, k favori gagnant, IC Wilson 95 % calculé côté serveur, probabilité marché, intensité, contradictions, période ; couverture, seuils, avertissement sous 30 |
+| `GET /api/v2/laboratoire?intensity=` | Par signature : n réglés, n règles, k favori gagnant, IC Wilson 95 % calculé côté serveur, probabilité marché, intensité, contradictions, convergences, période ; couverture, seuils, avertissement sous 30. L’union des signatures live complètes, live partielles et historiques réglées est affichée : une signature partielle (ex. `2 \| Oui \| ? \| G4`) n’est plus masquée. |
 | `GET /api/v2/sources/status` | Fraîcheur par source (`age_s`, `etat` ok/retard/panne), état de persistance, snapshots |
 | `GET/POST /api/v2/alertes` | État et activation/désactivation des alertes pour l’utilisateur Telegram authentifié |
 
