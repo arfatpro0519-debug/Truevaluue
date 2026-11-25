@@ -1,6 +1,6 @@
 import { api, authenticateTelegram } from './modules/api.js';
 import { state, toggleFollow } from './modules/state.js';
-import { initSheet, openSheet, closeSheet } from './modules/ui/sheet.js';
+import { initSheet, openSheet } from './modules/ui/sheet.js';
 import { toast } from './modules/ui/toast.js';
 import { esc, FOOT } from './modules/ui/format.js';
 import { renderEcarts, renderDetail, markOnboard } from './modules/views/ecarts.js';
@@ -95,7 +95,7 @@ async function openDetail(id) {
 
 function share(id) {
   const d = currentDetail;
-  if (!d) return;
+  if (!d || (id && d.id !== id)) return;
   const text = `${d.match?.home} – ${d.match?.away} · ${d.issue} : Betfair ${d.betfair_pct ?? '—'} % contre Polymarket ${d.polymarket_pct ?? '—'} % (valeur nette ${d.valeur_nette_pts ?? '—'} pts). 18+ · aucun gain garanti.`;
   const url = new URL('https://t.me/share/url');
   url.searchParams.set('text', text);

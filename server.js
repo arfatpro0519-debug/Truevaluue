@@ -218,7 +218,7 @@ export function createApp(sourcesOrCfg = null) {
         buildSignals({ scraper, polymarket, force: false, maxPmLookup: 28 }),
         buildConfigurations({ scraper, polymarket, force: false, maxPmLookup: 28 }),
       ]);
-      const ecarts = buildEcarts({ signals, configurations }).ecarts;
+      const ecarts = buildEcarts({ signals, configurations, showPmLinks: cfg.showPmLinks !== false }).ecarts;
       const sourcesStatus = buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore, calibration, gapStore });
       return await alerts.evaluateAndSend({ ecarts, sourcesStatus });
     } catch (err) {
@@ -1165,7 +1165,7 @@ export function createApp(sourcesOrCfg = null) {
         req,
         res,
         200,
-        buildEcarts({ signals, configurations, type: String(req.query?.type || 'all') })
+        buildEcarts({ signals, configurations, type: String(req.query?.type || 'all'), showPmLinks: cfg.showPmLinks !== false })
       );
     } catch (err) {
       console.error('Erreur /api/v2/ecarts:', err);
@@ -1181,6 +1181,7 @@ export function createApp(sourcesOrCfg = null) {
         signals,
         configurations,
         gapStore,
+        showPmLinks: cfg.showPmLinks !== false,
       });
       if (!detail) return sendError(req, res, 404, 'Écart introuvable.');
       return sendJson(req, res, 200, detail);

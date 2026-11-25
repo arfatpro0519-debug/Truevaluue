@@ -1,5 +1,3 @@
-let onClose = null;
-
 export function initSheet() {
   document.addEventListener('click', (e) => {
     if (e.target?.id === 'ov') closeSheet();
@@ -9,18 +7,16 @@ export function initSheet() {
   });
 }
 
-export function openSheet(html, afterRender = null) {
+export function openSheet(html) {
   const sheet = document.getElementById('sh');
   if (!sheet) return;
   sheet.innerHTML = html;
   document.body.classList.add('o');
   sheet.focus?.();
-  onClose = afterRender;
 }
 
 export function closeSheet() {
   document.body.classList.remove('o');
-  onClose = null;
 }
 
 export function isSheetOpen() {

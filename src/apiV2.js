@@ -1,8 +1,6 @@
 // Surface /api/v2 : constructions de réponses contractuelles, sans clé interne ni score inventé.
 // Toutes les valeurs absentes restent null ; aucun chiffre n'est affiché sans son effectif.
 
-import { classifyNiveau } from './recommend.js';
-
 const MIN_SAMPLE = 30;
 const round1 = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 
@@ -34,7 +32,7 @@ function freshness(row) {
   };
 }
 
-function cardFromSignal(s, row) {
+function cardFromSignal(s, row, showPmLinks = true) {
   const reco = s?.recommendation || {};
   const spread = Number.isFinite(reco.pm_spread_pts) ? reco.pm_spread_pts : null;
   const net = Number.isFinite(s.net_edge_pp) ? s.net_edge_pp : null;
@@ -56,7 +54,7 @@ function cardFromSignal(s, row) {
     liquidite_polymarket_usd: Number.isFinite(s.pm_liquidity) ? s.pm_liquidity : null,
     volume_betfair_eur: Number.isFinite(s.total_volume_bf) ? s.total_volume_bf : null,
     fraicheur: freshness(row),
-    pm_url: s.pm_url || null,
+    pm_url: showPmLinks ? s.pm_url || null : null,
   };
   if (type === 'mv') {
     card.variation = {
@@ -82,12 +80,12 @@ function indexRows(configurations) {
   );
 }
 
-export function buildEcarts({ signals, configurations, type = 'all' } = {}) {
+export function buildEcarts({ signals, configurations, type = 'all', showPmLinks = true } = {}) {
   const byKey = indexRows(configurations);
   const all = Array.isArray(signals?.all_signals) ? signals.all_signals : [];
   const wanted = ['all', 'net', 'mv', 'ct'].includes(type) ? type : 'all';
   const cards = all
-    .map((s) => cardFromSignal(s, byKey.get(s.fixture_key)))
+    .map((s) => cardFromSignal(s, byKey.get(s.fixture_key), showPmLinks))
     .filter((c) => wanted === 'all' || c.type === wanted);
   // Tri public : valeur nette décroissante puis liquidité (brief 2.4).
   cards.sort(
@@ -103,13 +101,13 @@ export function buildEcarts({ signals, configurations, type = 'all' } = {}) {
   };
 }
 
-export function buildEcartDetail({ id, signals, configurations, gapStore } = {}) {
+export function buildEcartDetail({ id, signals, configurations, gapStore, showPmLinks = true } = {}) {
   const byKey = indexRows(configurations);
   const all = Array.isArray(signals?.all_signals) ? signals.all_signals : [];
   const s = all.find((item) => item.id === id) || null;
   if (!s) return null;
   const row = byKey.get(s.fixture_key) || null;
-  const card = cardFromSignal(s, row);
+  const card = cardFromSignal(s, row, showPmLinks);
   const markets = (row?.markets || []).map((m) => ({
     marche: m.short || m.market,
     issue: m.favorite || null,

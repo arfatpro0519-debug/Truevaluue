@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { createApp } from '../server.js';
+import { buildEcarts } from '../src/apiV2.js';
 import { CalibrationStore } from '../src/calibration.js';
 import { MarketKey } from '../src/market.js';
 
@@ -164,6 +165,21 @@ test('Phase 3 : les 6 routes v2 répondent au contrat sans clé interne', async 
     assert.ok(status.persistance);
     assert.ok(status.snapshots);
   });
+});
+
+test('Phase 6 : SHOW_PM_LINKS=0 retire les liens Polymarket de l’API v2', () => {
+  const signals = {
+    all_signals: [
+      {
+        id: 'x', category: 'executable', fixture_key: 'a-b', home: 'A', away: 'B', league: 'L',
+        date: '2026-11-27T19:00:00Z', market_short: '1X2', side_label: '1', net_edge_pp: 5,
+        pm_liquidity: 9000, total_volume_bf: 10000, niveau: 'fort', pm_url: 'https://polymarket.com/e',
+        recommendation: { bf_pct: 62, pm_exec_pct: 55, pm_spread_pts: 2 },
+      },
+    ],
+  };
+  assert.equal(buildEcarts({ signals }).ecarts[0].pm_url, 'https://polymarket.com/e');
+  assert.equal(buildEcarts({ signals, showPmLinks: false }).ecarts[0].pm_url, null);
 });
 
 test('Phase 3 : cas dégradés — source en panne et aucun écart', async (t) => {

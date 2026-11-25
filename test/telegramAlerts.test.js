@@ -84,7 +84,7 @@ test('5.2 anti-spam : un envoi par couple match+issue et plafond quotidien', asy
   }
 });
 
-test('5.3 et 5.4 commandes webhook avec secret, désabonnement immédiat', async (t) => {
+test('5.3 et 5.4 commandes webhook avec secret, désabonnement immédiat', async () => {
   const { dir, calibration } = makeCalibration();
   const messages = [];
   const cfg = {

@@ -75,5 +75,7 @@ export function loadConfig() {
     sportscoreDisabled: env('SPORTSCORE_DISABLED') === '1',
     polymarketEnabled: env('POLYMARKET_ENABLED') !== '0',
     polymarketUrl: env('POLYMARKET_URL') || 'https://gamma-api.polymarket.com',
+  // Disponibilité légale variable selon les pays : permet de retirer les liens PM.
+  showPmLinks: env('SHOW_PM_LINKS') !== '0',
   };
 }
