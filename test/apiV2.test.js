@@ -140,7 +140,10 @@ test('Phase 3 : les 6 routes v2 répondent au contrat sans clé interne', async 
     assert.equal(bilan.ok, true);
     assert.ok(Object.hasOwn(bilan.precision, 'n'));
     assert.ok(Array.isArray(bilan.fiabilite));
-    for (const f of bilan.fiabilite) assert.ok(Object.hasOwn(f, 'n'));
+    for (const f of bilan.fiabilite) {
+      assert.ok(Object.hasOwn(f, 'n'));
+      assert.ok(!/Mouvements 24 h|Propositions|Gagné|Perdu|confiance/i.test(f.libelle));
+    }
     assert.ok(Object.hasOwn(bilan.rendement_theorique, 'roi_n'));
     assert.ok(bilan.rendement_theorique.avertissement.includes('garantie'));
 

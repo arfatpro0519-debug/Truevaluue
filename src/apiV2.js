@@ -161,9 +161,15 @@ export function buildBilan({ calibrationReport, signals } = {}) {
     .map((c) => {
       const n = c.confirmation_n ?? c.decided ?? 0;
       const hasOdds = (c.roi_n ?? 0) > 0;
+      const libelles = {
+        executable: 'Écarts nets',
+        movement: 'Mouvements Betfair depuis l’ouverture',
+        flow: 'Flux & retards Betfair × Polymarket',
+        contradiction: 'Contradictions',
+      };
       return {
         type: c.category,
-        libelle: c.label || c.category,
+        libelle: libelles[c.category] || c.category,
         n,
         taux_confirmation_pct: c.confirmation_rate_pct ?? null,
         sample_warning: n < MIN_SAMPLE ? 'échantillon trop faible' : null,
