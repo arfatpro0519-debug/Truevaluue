@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+data/*.db
+data/*.db-*
+data/gap_snapshots.json
+.cache/
+.config/
+.local/
+*.log
