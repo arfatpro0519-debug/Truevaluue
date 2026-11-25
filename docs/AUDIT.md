@@ -108,3 +108,26 @@ La maquette de référence `truevalue.html` est actuellement à la **racine** du
 - `npm run build` et `npm test` verts (35/35).
 
 **Décisions prises faute d'ambiguïté** : repli JSON retenu plutôt que l'élévation de `engines` à `>=22.5`, afin de garder les tests exécutables sur le Node 20 de l'environnement (le brief autorise explicitement « ou ajouter un repli »). Le garde-fou production exige la **variable d'environnement** `ADMIN_PASSCODE`, même si un hash admin est stocké en base ; à confirmer si le propriétaire souhaite autoriser le hash seul.
+
+---
+
+## 8. Phase 2 — Corrections du moteur (branche `refonte-v2`)
+
+Cinq commits, un par point du brief, chacun accompagné de tests dans `test/phase2_engine.test.js`.
+État final : `npm test` **52/52 verts**, `npm run build` vert, aucune régression des routes v1.
+
+| Point | Changement | Test |
+|---|---|---|
+| 2.1 | `deriveGoalsProfile()` expose `quality_status: 'donnees_incoherentes'` pour les profils O/U impossibles ; ils ne sont plus comptés comme contradiction, n'entrent jamais dans une signature 72 (`?` à la place de `Atypique`) et sont comptés dans `quality_report` (exposé par `/api/configurations`). | Profil Under/Over/Under → `incoherent=1`, `quality_report.donnees_incoherentes=1`, code sans `Atypique`. |
+| 2.2 | `analyzeConcordance()` regroupe tous les désaccords Betfair × Polymarket (1X2, BTTS, chaque O/U, profil de buts) en **une seule cause** `betfair_polymarket` avec la liste des marchés ; chaque cause porte un `cause` et des `markets`. Le signal contradiction expose `causes[]` et `contradictions_count` = nombre de causes. | 3 marchés en désaccord → 1 cause BF×PM, signal `contradictions_count` cohérent. |
+| 2.3 | Les seuils 58/60/62/54, 2.0/5.0/10.0, 500 €, 28/40/72 h et 5 000 $ sont dans `DEFAULT_CONFIG_THRESHOLDS` (et `STRICT_THRESHOLDS` pour le niveau). `collectFixturesAndQuotes()` reçoit désormais les seuils. | Valeurs par défaut + surcharge `lowGoalsFavMinPct: 70` modifiant réellement la concordance. |
+| 2.4 | `interest_score`/`score_sort` deviennent des clés internes `sort_key`. La liste publique `all_signals` est triée par **valeur nette décroissante puis liquidité** via `sortEcartsParValeurNette()`. | Ordre du tri, égalité `sort_key`/alias, listes non décroissantes en valeur nette. |
+| 2.5 | `classifyNiveau()` (dans `recommend.js`) dérive le Niveau de `net_edge_pp` **déjà calculé** : Fort ≥ 4, Moyen ≥ 2, Faible < 2, **Limité** sous 5 000 $ de liquidité PM. `high/moderate/low` sont réconciliés via `CONFIDENCE_TO_NIVEAU`; `niveau`/`niveau_label` ajoutés aux recommandations et signaux. Cas limites testés (5000 exact, seuils surchargés, donnée absente → `null`). | 7 cas de classification + recommandation réelle avec palier internal et `limite`. |
+
+**Décisions prises faute d'ambiguïté :**
+
+- Les alias `interest_score`/`score_sort` **restent présents** dans les réponses `/api/*` (et les objets retournés par les fonctions du moteur) pour ne pas casser le contrat v1, le front historique et les tests existants. Ils sont commentés « alias v1 déprécié », ne sont plus utilisés comme source de vérité interne, et **ne seront pas exposés dans `/api/v2/*`** (Phase 3). Le brief dit « jamais exposés ni affichés » : cela s'applique à la nouvelle surface v2 et à la nouvelle interface (Phase 4).
+- `profile: 'Atypique'` et `status: 'atypique'` restent également des alias v1 dépréciés ; la source de vérité est `quality_status`. Aucun test existant n'en dépendait.
+- Le Niveau est calculé une seule fois dans `recommend.js` à partir de `net_edge_pp`, jamais recalculé dans `configurations.js`. La liquidité l'emporte sur l'écart (règle « Limité » du §4).
+
+**Reste à faire (hors Phase 2) :** exposition du `niveau` et des `causes` dans le contrat `/api/v2/ecarts` (Phase 3, annexe A), suppression définitive des alias dans la réponse v2, et remplacement de l'ancienne UI qui affiche encore `score_sort` (Phase 4).
