@@ -1286,17 +1286,55 @@ export function createApp(sourcesOrCfg = null) {
     return sendAsset(req, res, 'text/css; charset=utf-8', getStaticAsset(path.join(SITE_DIR, 'style.css')));
   });
 
-  app.get('/modules/:file', (req, res) => {
-    const file = String(req.params.file || '');
-    if (!/^[a-z0-9_-]+\.js$/i.test(file)) {
-      return sendError(req, res, 404, 'Module introuvable.');
-    }
-    const resolved = path.resolve(MODULES_DIR, file);
-    if (!resolved.startsWith(MODULES_DIR + path.sep) || !fs.existsSync(resolved)) {
+  const serveJsModule = (dir, file, req, res) => {
+    const name = String(file || '');
+    if (!/^[a-z0-9_-]+\.js$/i.test(name)) return sendError(req, res, 404, 'Module introuvable.');
+    const resolved = path.resolve(dir, name);
+    if (!resolved.startsWith(dir + path.sep) || !fs.existsSync(resolved)) {
       return sendError(req, res, 404, 'Module introuvable.');
     }
     return sendAsset(req, res, 'application/javascript; charset=utf-8', getStaticAsset(resolved));
-  });
+  };
+
+  app.get('/modules/:file', (req, res) => serveJsModule(MODULES_DIR, req.params.file, req, res));
+  app.get('/modules/views/:file', (req, res) => serveJsModule(path.join(MODULES_DIR, 'views'), req.params.file, req, res));
+  app.get('/modules/ui/:file', (req, res) => serveJsModule(path.join(MODULES_DIR, 'ui'), req.params.file, req, res));
+
+  /* ---- INTERFACE HISTORIQUE /legacy (derrière ADMIN_PASSCODE) ---- */
+  const requireLegacyAccess = (req, res, next) => {
+    if (req.auth?.isAdmin) return next();
+    const header = String(req.headers?.authorization || '');
+    if (header.startsWith('Basic ')) {
+      try {
+        const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+        const sep = decoded.indexOf(':');
+        const passcode = sep >= 0 ? decoded.slice(sep + 1) : '';
+        if (cfg.adminPasscode && verifyEnvPasscode(passcode, cfg.adminPasscode)) return next();
+        const stored = calibration.getSetting?.('admin_passcode_hash');
+        if (stored && verifyPasscodeHash(passcode, stored)) return next();
+      } catch {
+        // Identifiants invalides : on refuse ci-dessous.
+      }
+    }
+    res.setHeader('WWW-Authenticate', 'Basic realm="Truevalue Legacy", charset="UTF-8"');
+    return sendError(req, res, 401, 'Accès legacy réservé à l’administrateur.');
+  };
+
+  app.get(['/legacy', '/legacy/'], requireLegacyAccess, (req, res) =>
+    sendAsset(req, res, 'text/html; charset=utf-8', getStaticAsset(path.join(LEGACY_DIR, 'index.html')))
+  );
+  app.get('/legacy/index.html', requireLegacyAccess, (req, res) =>
+    sendAsset(req, res, 'text/html; charset=utf-8', getStaticAsset(path.join(LEGACY_DIR, 'index.html')))
+  );
+  app.get('/legacy/app.js', requireLegacyAccess, (req, res) =>
+    sendAsset(req, res, 'application/javascript; charset=utf-8', getStaticAsset(path.join(LEGACY_DIR, 'app.js')))
+  );
+  app.get('/legacy/style.css', requireLegacyAccess, (req, res) =>
+    sendAsset(req, res, 'text/css; charset=utf-8', getStaticAsset(path.join(LEGACY_DIR, 'style.css')))
+  );
+  app.get('/legacy/modules/:file', requireLegacyAccess, (req, res) =>
+    serveJsModule(path.join(LEGACY_DIR, 'modules'), req.params.file, req, res)
+  );
 
   app.use((req, res) => {
     return sendError(req, res, 404, 'Route inconnue.');

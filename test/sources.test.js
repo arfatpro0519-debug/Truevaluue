@@ -485,11 +485,12 @@ test('HTTP server exposes the 4 raw data source endpoints and static UI cleanly'
 
     const htmlRes = await fetch(`${baseUrl}/`).then((r) => r.text());
     assert.ok(htmlRes.includes('Truevalue'));
-    assert.ok(htmlRes.includes('Mini App Telegram'));
-    assert.ok(htmlRes.includes('Betfair'));
-    assert.ok(htmlRes.includes('Polymarket'));
-    assert.ok(htmlRes.includes('ESPN'));
-    assert.ok(htmlRes.includes('SportScore'));
+    assert.ok(htmlRes.includes('Analyse statistique'));
+    assert.ok(htmlRes.includes('18+'));
+    assert.ok(htmlRes.includes('Écarts'));
+    assert.ok(htmlRes.includes('Bilan'));
+    assert.ok(htmlRes.includes('Matchs'));
+    assert.ok(htmlRes.includes('type="module" src="/app.js"'));
 
     // Safe module asset serving + path traversal blocked
     const modJs = await fetch(`${baseUrl}/modules/state.js`);

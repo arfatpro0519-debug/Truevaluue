@@ -1,96 +1,35 @@
 <!doctype html>
-<html lang="fr" data-theme="auto">
+<html lang="fr">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Truevalue — Mini App Telegram</title>
-<meta name="description" content="Mini App Telegram d’analyse multi-marchés Betfair (Arbworld) × Polymarket, 72 signatures directionnelles, signaux exécutables et calibration empirique ESPN &amp; SportScore." />
-<meta property="og:title" content="Truevalue — Mini App Telegram" />
-<meta property="og:description" content="Analyse multi-marchés Betfair × Polymarket, 72 signatures, signaux en direct et calibration publique." />
-<meta name="theme-color" content="#efeff4" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/style.css" />
-<script src="https://telegram.org/js/telegram-web-app.js" defer></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f4f7">
+<title>Truevalue — analyse statistique</title>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<a class="skip-link" href="#app">Aller au contenu principal</a>
-
-<header class="tg-topbar">
-  <div class="tg-topbar-inner">
-    <a class="tg-brand" href="#accueil" id="brandHomeLink">Truevalue</a>
-    <nav class="tg-desk-nav" id="deskNav" aria-label="Navigation principale"></nav>
-    <div class="tg-top-actions">
-      <button type="button" class="tg-icon-btn" id="helpGuideBtn" aria-label="Ouvrir le guide et glossaire" title="Guide &amp; Glossaire">
-        <span aria-hidden="true">?</span>
-      </button>
-      <button type="button" class="tg-icon-btn" id="themeToggleBtn" aria-label="Changer de thème (Système / Telegram)" title="Changer de thème">
-        <span id="themeIcon" aria-hidden="true">◐</span>
-      </button>
-      <button type="button" class="tg-refresh-btn" id="refreshBtn">Actualiser</button>
-      <button type="button" class="tg-icon-btn tg-menu-btn" id="menuToggleBtn" aria-label="Ouvrir le menu et le compte" title="Menu &amp; Compte">
-        <span aria-hidden="true">☰</span>
-        <span class="tg-menu-lbl">Menu</span>
-      </button>
+<header id="hd">
+  <div class="r">
+    <div>
+      <h1>Truevalue</h1>
+      <p>Analyse statistique · 18+ · aucun gain garanti</p>
+    </div>
+    <div class="ib">
+      <button type="button" data-lab="1" aria-label="Ouvrir le Laboratoire" style="width:auto;padding:0 10px">Lab</button>
+      <button type="button" id="bh" aria-label="Glossaire">?</button>
+      <button type="button" id="br" aria-label="Actualiser">↻</button>
     </div>
   </div>
 </header>
-
-<main id="app" tabindex="-1" aria-live="polite"></main>
-
-<nav class="tabs" aria-label="Menu inférieur">
-  <div id="tabs"></div>
+<main id="app" aria-live="polite"></main>
+<nav id="nv" aria-label="Navigation principale">
+  <button type="button" data-tab="ec" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-5 4 4 8-9"/></svg>Écarts</button>
+  <button type="button" data-tab="bi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Bilan</button>
+  <button type="button" data-tab="ma"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Matchs</button>
 </nav>
-
-<div class="ov" id="ov" aria-hidden="true"></div>
-
-<section class="sheet" id="proSheet" role="dialog" aria-modal="true" aria-labelledby="proTitle" aria-hidden="true" inert>
-  <div class="grab" aria-hidden="true"></div>
-  <div class="star" aria-hidden="true">
-    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
-  </div>
-  <h2 id="proTitle">Truevalue Pro</h2>
-  <div class="pr"><b id="proSheetPrice">1 500 ★</b> / 30 jours · paiement Telegram Stars (sans renouvellement auto)</div>
-  <div class="list">
-    <div class="f">
-      <i aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg></i>
-      <div>Tous les signaux en direct<span>10 marchés comparés Betfair × Polymarket</span></div>
-    </div>
-    <div class="f">
-      <i aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></i>
-      <div>Seuils ajustables et valeur nette<span>6 critères audités et écart réel après spread</span></div>
-    </div>
-    <div class="f">
-      <i aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></i>
-      <div>72 configurations de marché<span>Détection des retournements et contradictions</span></div>
-    </div>
-    <div class="f">
-      <i aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></i>
-      <div>Historique et résultats vérifiés<span>Scores officiels ESPN &amp; SportScore avec bilan ROI</span></div>
-    </div>
-  </div>
-  <button type="button" class="main" id="buyBtn">Souscrire avec Telegram Stars</button>
-  <button type="button" class="sec-btn" id="closeProBtn">Rester en version gratuite</button>
-  <div class="fine">Réservé aux majeurs (18+). Outil d’analyse statistique ; aucun gain n’est garanti. Truevalue n’est affilié ni à Betfair ni à Polymarket.</div>
-</section>
-
-<section class="sheet sheet-wide" id="detailSheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" inert>
-  <div class="grab" aria-hidden="true"></div>
-  <div class="sheet-head">
-    <div class="sheet-head-nav">
-      <button type="button" class="sheet-back" id="detailBackBtn" hidden aria-label="Revenir à la fiche précédente">← Retour</button>
-      <div class="sheet-head-text">
-        <h2 id="detailTitle">Détail</h2>
-        <p class="sheet-sub" id="detailSub"></p>
-      </div>
-    </div>
-    <button type="button" class="sheet-close" id="detailCloseBtn" aria-label="Fermer la fenêtre">Fermer</button>
-  </div>
-  <div class="sheet-body" id="detailBody"></div>
-</section>
-
-<div id="toast" role="status" aria-live="polite"></div>
+<div id="ov"></div>
+<section id="sh" role="dialog" aria-modal="true" aria-label="Détail de l'écart" tabindex="-1"></section>
+<div id="ts" role="status" aria-live="polite"></div>
 <script type="module" src="/app.js"></script>
 </body>
 </html>
