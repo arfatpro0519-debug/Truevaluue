@@ -22,6 +22,15 @@ export const GOALS_PROFILES = Object.freeze([
   { code: 'G4', label: 'G4 · Très offensif (O1.5 / O2.5 / O3.5)' },
 ]);
 
+// Qualité des lignes O/U : un profil « Atypique » viole P(O3.5) ≤ P(O2.5) ≤ P(O1.5).
+// Il est classé donnees_incoherentes, jamais compté comme contradiction ni comme signature 72.
+// Les champs `profile`/`status` historiques sont conservés pour les routes /api/* dépréciées.
+export const GOALS_QUALITY = Object.freeze({
+  Ok: 'donnees_valides',
+  Incomplet: 'incomplet',
+  Incoherent: 'donnees_incoherentes',
+});
+
 export const IntensityLevel = Object.freeze({
   Equilibre: 'equilibre',
   Faible: 'faible',
@@ -459,29 +468,35 @@ export function deriveGoalsProfile(ou15Snap, ou25Snap, ou35Snap, usePm = false) 
     return {
       profile: null,
       status: presentCount === 0 ? 'indisponible' : 'incomplet',
+      quality_status: GOALS_QUALITY.Incomplet,
       lines_present: presentCount,
       lines: { ou15: f15, ou25: f25, ou35: f35 },
     };
   }
 
   if (f15 === 'Under' && f25 === 'Under' && f35 === 'Under') {
-    return { profile: 'G1', status: 'complet', lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
+    return { profile: 'G1', status: 'complet', quality_status: GOALS_QUALITY.Ok, lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
   }
   if (f15 === 'Over' && f25 === 'Under' && f35 === 'Under') {
-    return { profile: 'G2', status: 'complet', lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
+    return { profile: 'G2', status: 'complet', quality_status: GOALS_QUALITY.Ok, lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
   }
   if (f15 === 'Over' && f25 === 'Over' && f35 === 'Under') {
-    return { profile: 'G3', status: 'complet', lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
+    return { profile: 'G3', status: 'complet', quality_status: GOALS_QUALITY.Ok, lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
   }
   if (f15 === 'Over' && f25 === 'Over' && f35 === 'Over') {
-    return { profile: 'G4', status: 'complet', lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
+    return { profile: 'G4', status: 'complet', quality_status: GOALS_QUALITY.Ok, lines_present: 3, lines: { ou15: f15, ou25: f25, ou35: f35 } };
   }
   return {
-    profile: 'Atypique',
-    status: 'atypique',
+    profile: 'Atypique', // alias v1 déprécié
+    status: 'atypique', // alias v1 déprécié
+    quality_status: GOALS_QUALITY.Incoherent,
     lines_present: 3,
     lines: { ou15: f15, ou25: f25, ou35: f35 },
   };
+}
+
+export function isIncoherentGoalsProfile(goals) {
+  return goals?.quality_status === GOALS_QUALITY.Incoherent || goals?.status === 'atypique';
 }
 
 function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
@@ -490,6 +505,7 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
   let neutrals = 0;
   let contradictions = 0;
   let unavailable = 0;
+  let incoherent = 0;
 
   const snap = (k) => marketSnaps[k] || null;
   const s1x2 = snap(MarketKey.OneXTwo);
@@ -530,7 +546,8 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
   }
 
   // 2. BTTS vs Profil de buts (G1..G4 ou O/U 2.5)
-  if (sBtts?.favorite && (bfGoals.profile || sOu25?.favorite)) {
+  // Un profil incohérent n'est pas une contradiction : c'est une donnée à écarter (2.1).
+  if (sBtts?.favorite && (bfGoals.profile || sOu25?.favorite) && !isIncoherentGoalsProfile(bfGoals)) {
     const isLowGoals = bfGoals.profile === 'G1' || (sOu25?.favorite === 'Under' && (sOu25?.favorite_pct ?? 0) >= 58);
     const isHighGoals = bfGoals.profile === 'G4' || (sOu25?.favorite === 'Over' && (sOu25?.favorite_pct ?? 0) >= 60);
     const hasHeavySideFav = Boolean(s1x2?.favorite && s1x2.favorite !== 'X' && (s1x2.favorite_pct ?? 0) >= 62);
@@ -566,12 +583,14 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
   }
 
   // 3. Cohérence des lignes O/U 1.5 / 2.5 / 3.5
-  if (bfGoals.status === 'atypique') {
-    contradictions += 1;
+  // Incohérent = qualité de données, PAS une contradiction et PAS une signature 72.
+  if (isIncoherentGoalsProfile(bfGoals)) {
+    incoherent += 1;
     items.push({
-      status: 'contradiction',
+      status: GOALS_QUALITY.Incoherent,
+      cause: 'donnees_incoherentes',
       pair: 'Lignes O/U 1.5 / 2.5 / 3.5',
-      detail: `Profil atypique : O/U 1.5=${bfGoals.lines.ou15}, 2.5=${bfGoals.lines.ou25}, 3.5=${bfGoals.lines.ou35}.`,
+      detail: `Profil de buts incohérent (données non exploitables) : O/U 1.5=${bfGoals.lines.ou15}, 2.5=${bfGoals.lines.ou25}, 3.5=${bfGoals.lines.ou35}.`,
     });
   } else if (bfGoals.status === 'complet') {
     convergences += 1;
@@ -638,8 +657,8 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
   if (
     bfGoals.profile &&
     pmGoals.profile &&
-    bfGoals.profile !== 'Atypique' &&
-    pmGoals.profile !== 'Atypique'
+    !isIncoherentGoalsProfile(bfGoals) &&
+    !isIncoherentGoalsProfile(pmGoals)
   ) {
     if (bfGoals.profile !== pmGoals.profile) {
       contradictions += 1;
@@ -670,6 +689,7 @@ function analyzeConcordance(marketSnaps, bfGoals, pmGoals) {
     neutrals,
     contradictions,
     unavailable,
+    incoherent,
     items,
   };
 }
@@ -709,16 +729,18 @@ export function analyzeFixtureConfiguration(
   const ftBlock = s1x2?.source_bf ? s1x2.favorite : null;
   const bttsBlock = sBtts?.source_bf ? sBtts.favorite : null;
   const htBlock = sHt?.source_bf ? sHt.favorite : null;
+  const goalsIncoherent = isIncoherentGoalsProfile(bfGoals);
   const goalsBlock =
-    bfGoals.profile && bfGoals.profile !== 'Atypique' ? bfGoals.profile : null;
+    bfGoals.profile && !goalsIncoherent ? bfGoals.profile : null;
 
   const blocksPresent = [ftBlock, bttsBlock, htBlock, goalsBlock].filter(Boolean).length;
   const isComplete72 = blocksPresent === 4;
+  // Un profil incohérent est exclu des 72 signatures : jamais de code « Atypique » ici.
   const signatureCode = [
     ftBlock || '?',
     bttsBlock || '?',
     htBlock || '?',
-    bfGoals.profile || '?',
+    goalsBlock || '?',
   ].join(' | ');
 
   // Signature côté Polymarket (sans inventer de valeurs manquantes)
@@ -781,6 +803,11 @@ export function analyzeFixtureConfiguration(
     pm_liquidity: numOrNull(quote?.liquidity),
     pm_volume: numOrNull(quote?.volume),
     markets_count: availableMarkets.length,
+    quality_status: goalsIncoherent
+      ? GOALS_QUALITY.Incoherent
+      : bfGoals.status === 'complet'
+      ? GOALS_QUALITY.Ok
+      : GOALS_QUALITY.Incomplet,
     signature: {
       code: signatureCode,
       is_complete: isComplete72,
@@ -788,11 +815,14 @@ export function analyzeFixtureConfiguration(
       ft: ftBlock,
       btts: bttsBlock,
       ht: htBlock,
-      goals_profile: bfGoals.profile,
-      goals_status: bfGoals.status,
+      goals_profile: goalsBlock,
+      goals_status: bfGoals.status, // alias v1 déprécié
+      goals_quality: bfGoals.quality_status,
+      donnees_incoherentes: goalsIncoherent,
       goals_lines_present: bfGoals.lines_present,
       pm_code: pmSignatureCode,
       pm_goals_profile: pmGoals.profile,
+      pm_goals_quality: pmGoals.quality_status,
     },
     axes: {
       orientation: {
@@ -1020,6 +1050,7 @@ export function buildConfigurationsFromData(
 
   const blockCoverage = { one_x_two: 0, btts: 0, half_time: 0, goals_profile: 0 };
   const goalsDist = { G1: 0, G2: 0, G3: 0, G4: 0, atypique: 0, incomplet: 0 };
+  let incoherentGoalsCount = 0;
   let completeCount = 0;
   let partialCount = 0;
   let pmMatchedCount = 0;
@@ -1031,6 +1062,7 @@ export function buildConfigurationsFromData(
   let maxDate = null;
 
   for (const r of rows) {
+    if (r.quality_status === GOALS_QUALITY.Incoherent) incoherentGoalsCount += 1;
     if (r.pm_matched) pmMatchedCount += 1;
     if (r.signature.ft) blockCoverage.one_x_two += 1;
     if (r.signature.btts) blockCoverage.btts += 1;
@@ -1177,6 +1209,14 @@ export function buildConfigurationsFromData(
       max_date: maxDate,
     },
     thresholds: resolvedTh,
+    // Rapport qualité (2.1) : les profils de buts impossibles sont comptés ici,
+    // jamais comme contradiction ni comme l'une des 72 signatures.
+    quality_report: {
+      donnees_incoherentes: incoherentGoalsCount,
+      exclues_des_72: incoherentGoalsCount,
+      incomplet: goalsDist.incomplet,
+      signatures_possibles: 72,
+    },
     summary: {
       total_fixtures: rows.length,
       pm_matched_fixtures: pmMatchedCount,
