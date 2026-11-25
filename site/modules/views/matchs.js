@@ -1,11 +1,12 @@
 import { state } from '../state.js';
-import { esc, time, FOOT, skeleton, errorState, emptyState } from '../ui/format.js';
+import { esc, time, sourceBanner, FOOT, skeleton, errorState, emptyState } from '../ui/format.js';
 
 export function renderMatchs() {
   if (state.loading) return skeleton();
   if (state.error) return errorState(state.error);
   const matchs = Array.isArray(state.data.ma?.matchs) ? state.data.ma.matchs : [];
-  return `<input id="q" type="search" placeholder="Équipe ou compétition" aria-label="Rechercher un match" value="${esc(state.query)}">
+  return sourceBanner(state.data.sources?.sources) +
+    `<input id="q" type="search" placeholder="Équipe ou compétition" aria-label="Rechercher un match" value="${esc(state.query)}">
     <div class="cd" id="ml" style="padding:4px 14px">${matchList(matchs)}</div>${FOOT}`;
 }
 

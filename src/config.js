@@ -64,6 +64,7 @@ export function loadConfig() {
   alertPmMinLiquidityUsd: envInt('ALERT_PM_MIN_LIQUIDITY_USD', 5000),
   alertMaxAgeS: envInt('ALERT_MAX_AGE_S', 600),
   alertDailyCap: envInt('ALERT_DAILY_CAP', 10),
+  sourceStaleSecs: envInt('SOURCE_STALE_SECS', 600),
     arbworldBase: env('ARBWORLD_BASE') || 'https://arbworld.net/fr/moneyway',
     cacheTtlSecs: envInt('CACHE_TTL_SECS', 20),
     staleTtlSecs: envInt('STALE_TTL_SECS', 900),

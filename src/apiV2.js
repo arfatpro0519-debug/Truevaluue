@@ -290,7 +290,7 @@ function newestCacheAge(cache) {
 }
 
 export function buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore, calibration, gapStore } = {}) {
-  const staleSecs = 600;
+  const staleSecs = Number.isFinite(cfg?.sourceStaleSecs) ? cfg.sourceStaleSecs : 600;
   const mk = (nom, age, detail = null) => ({
     nom,
     age_s: age,

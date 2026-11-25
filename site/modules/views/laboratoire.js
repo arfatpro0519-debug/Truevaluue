@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { esc, f1, int, bar, FOOT, skeleton, errorState } from '../ui/format.js';
+import { esc, f1, int, bar, sourceBanner, FOOT, skeleton, errorState } from '../ui/format.js';
 
 function interval(s) {
   const [lo, hi] = s.ic95_pct || [null, null];
@@ -20,7 +20,7 @@ export function renderLaboratoire() {
   const coverage = l.couverture || {};
   const intensities = ['all', 'equilibre', 'faible', 'moderee', 'forte', 'extreme'];
   const labels = { all: 'Toutes', equilibre: 'Équilibre', faible: 'Faible', moderee: 'Modérée', forte: 'Forte', extreme: 'Extrême' };
-  return `<div class="r" style="margin-bottom:10px"><div class="mt" style="font-size:18px">Laboratoire</div><button type="button" class="ch" data-tab="ec">← Retour</button></div>
+  return sourceBanner(state.data.sources?.sources) + `<div class="r" style="margin-bottom:10px"><div class="mt" style="font-size:18px">Laboratoire</div><button type="button" class="ch" data-tab="ec">← Retour</button></div>
   <div class="cd" style="background:var(--wb);border-color:transparent"><div class="mt" style="color:var(--wa)">Outil d’étude, pas de pronostics</div>
     <div class="sm" style="margin-top:2px">Chaque résultat affiche le nombre de matchs réglés et la période. Sous 30 matchs, aucune conclusion.</div></div>
   <div class="gr">

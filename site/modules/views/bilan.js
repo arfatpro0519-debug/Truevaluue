@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { esc, f1, int, bar, FOOT, skeleton, errorState } from '../ui/format.js';
+import { esc, f1, int, bar, sourceBanner, FOOT, skeleton, errorState } from '../ui/format.js';
 
 export function renderBilan() {
   if (state.loading) return skeleton();
@@ -11,7 +11,7 @@ export function renderBilan() {
   const pm = Number.isFinite(p.polymarket_brier) ? p.polymarket_brier : null;
   const verdict = bf === null || pm === null ? 'Précision non mesurée' : Math.abs(bf - pm) < 0.005 ? 'Précision similaire' : bf < pm ? 'Betfair devance Polymarket' : 'Polymarket devance Betfair';
   const roi = b.rendement_theorique || {};
-  return `<div class="cd"><div class="sm">Qui est le plus précis ?</div>
+  return sourceBanner(state.data.sources?.sources) + `<div class="cd"><div class="sm">Qui est le plus précis ?</div>
     <div class="mt" style="font-size:17px">${verdict}</div>
     <div class="sm" style="margin-bottom:8px">${int(p.n)} marchés réglés · Brier (plus bas = plus précis)${p.sample_warning ? ' · échantillon trop faible' : ''}</div>
     ${bar('Betfair', bf === null ? null : bf * 100 / Math.max(bf, pm, 0.001) * 50, 'var(--ac)', f1(bf))}

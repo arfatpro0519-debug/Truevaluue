@@ -105,4 +105,8 @@ test('Phase 4 : vocabulaire corrigé et appels v2 réels dans le code source', (
   assert.ok(ecarts.includes('histogramme') === false);
   const api = fs.readFileSync(path.join(ROOT, 'site/modules/api.js'), 'utf8');
   assert.ok(api.includes("request('/alertes'"));
+  for (const view of ['ecarts', 'matchs', 'bilan', 'laboratoire']) {
+    const src = fs.readFileSync(path.join(ROOT, `site/modules/views/${view}.js`), 'utf8');
+    assert.ok(src.includes('sourceBanner'), `${view} n'affiche pas l'état des sources`);
+  }
 });

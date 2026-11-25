@@ -1,5 +1,5 @@
 import { state, markOnboardingDone } from '../state.js';
-import { esc, f1, int, tag, bar, fresh, FOOT, skeleton, errorState, emptyState, time } from '../ui/format.js';
+import { esc, f1, int, tag, bar, fresh, sourceBanner, FOOT, skeleton, errorState, emptyState, time } from '../ui/format.js';
 
 function sourceStrip(sources) {
   if (!Array.isArray(sources)) return '';
@@ -48,7 +48,7 @@ function card(c) {
       <span>Écart <b>${f1(c.ecart_pts)} pts</b></span>
       <span>Valeur nette <b>${f1(c.valeur_nette_pts)} pts</b></span>
       <span>Liquidité <b>${int(c.liquidite_polymarket_usd)} $</b></span>
-      ${fresh(age)}
+      ${fresh(age, state.data.sources?.seuil_retard_s ?? 600)}
     </div></button>`;
 }
 
@@ -64,7 +64,6 @@ export function renderEcarts() {
   if (s.loading) return skeleton();
   if (s.error) return errorState(s.error);
   const sources = s.data.sources;
-  const down = (sources?.sources || []).some((x) => x.etat === 'panne');
   const data = s.data.ec;
   const all = Array.isArray(data?.ecarts) ? [...data.ecarts] : [];
   const filtered = s.type === 'all' ? all : all.filter((c) => c.type === s.type);
@@ -79,7 +78,7 @@ export function renderEcarts() {
   ];
   return (
     onboarding() +
-    (down ? '<div class="bn down" role="alert">Au moins une source est en panne : les chiffres peuvent être incomplets.</div>' : '') +
+    sourceBanner(sources?.sources) +
     sourceStrip(sources?.sources) +
     `<div class="seg" role="group" aria-label="Filtrer les écarts">${chips
       .map(([v, l]) => `<button type="button" class="ch${s.type === v ? ' on' : ''}" data-type="${v}">${l}</button>`)

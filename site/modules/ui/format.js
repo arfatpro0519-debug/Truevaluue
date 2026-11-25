@@ -39,10 +39,25 @@ export function bar(label, value, color = 'var(--ac)', width = null) {
   return `<div class="br"><span>${esc(label)}</span><div class="tr"><i style="width:${w}%;background:${color}"></i></div><b>${esc(right)}</b></div>`;
 }
 
-export function fresh(ageS) {
+export function fresh(ageS, seuilS = 600) {
   if (!Number.isFinite(ageS)) return '<span>fraîcheur inconnue</span>';
-  const cls = ageS > 600 ? ' class="wa"' : '';
-  return `<span${cls}>${ageS > 600 ? '⚠ ' : ''}il y a ${Math.round(ageS / 60)} min</span>`;
+  const cls = ageS > seuilS ? ' class="wa"' : '';
+  return `<span${cls}>${ageS > seuilS ? '⚠ ' : ''}il y a ${Math.round(ageS / 60)} min</span>`;
+}
+
+// État des sources affiché sur CHAQUE écran (brief 4.4).
+export function sourceBanner(sources) {
+  if (!Array.isArray(sources)) return '';
+  const down = sources.filter((s) => s.etat === 'panne');
+  const late = sources.filter((s) => s.etat === 'retard');
+  let html = '';
+  if (down.length) {
+    html += `<div class="bn down" role="alert">Source en panne : ${down.map((s) => esc(s.nom)).join(', ')}. Les chiffres peuvent être incomplets.</div>`;
+  }
+  if (late.length) {
+    html += `<div class="bn warn">⚠ Source en retard : ${late.map((s) => esc(s.nom)).join(', ')}.</div>`;
+  }
+  return html;
 }
 
 export const FOOT = '<p class="ft2">18+ · Outil d’analyse statistique, aucun gain garanti. Non affilié à Betfair ni Polymarket.</p>';
