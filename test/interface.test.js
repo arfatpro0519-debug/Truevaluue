@@ -87,7 +87,7 @@ test('Phase 4 : vocabulaire corrigé et appels v2 réels dans le code source', (
   const files = [
     'site/index.html', 'site/app.js', 'site/modules/api.js', 'site/modules/state.js',
     'site/modules/views/ecarts.js', 'site/modules/views/matchs.js',
-    'site/modules/views/bilan.js', 'site/modules/views/laboratoire.js',
+    'site/modules/views/bilan.js', 'site/modules/views/laboratoire.js', 'site/modules/views/configuration.js',
     'site/modules/ui/format.js', 'site/modules/ui/sheet.js', 'site/modules/ui/toast.js',
     'site/style.css',
   ];
@@ -105,6 +105,12 @@ test('Phase 4 : vocabulaire corrigé et appels v2 réels dans le code source', (
   assert.ok(ecarts.includes('histogramme') === false);
   const api = fs.readFileSync(path.join(ROOT, 'site/modules/api.js'), 'utf8');
   assert.ok(api.includes("request('/alertes'"));
+  const lab = fs.readFileSync(path.join(ROOT, 'site/modules/views/laboratoire.js'), 'utf8');
+  assert.ok(lab.includes('config-select'));
+  const cfgView = fs.readFileSync(path.join(ROOT, 'site/modules/views/configuration.js'), 'utf8');
+  assert.ok(cfgView.includes('Paramètres de la configuration'));
+  assert.ok(cfgView.includes('Matchs associés'));
+  assert.ok(cfgView.includes('n_matchs_regles'));
   for (const view of ['ecarts', 'matchs', 'bilan', 'laboratoire']) {
     const src = fs.readFileSync(path.join(ROOT, `site/modules/views/${view}.js`), 'utf8');
     assert.ok(src.includes('sourceBanner'), `${view} n'affiche pas l'état des sources`);

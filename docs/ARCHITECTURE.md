@@ -40,6 +40,7 @@ Migration rejouable : `_migrateObservations()` ajoute `first_seen`, `last_pre_ki
 | `GET /api/v2/matchs?q=` | Matchs avec `has_betfair` / `has_polymarket` |
 | `GET /api/v2/bilan` | Brier + n, fiabilité par type (n, taux de confirmation, `sample_warning` sous 30), rendement théorique + `roi_n`, derniers résultats Confirmé/Infirmé/Remboursé |
 | `GET /api/v2/laboratoire?intensity=` | Par signature : n réglés, n règles, k favori gagnant, IC Wilson 95 % calculé côté serveur, probabilité marché, intensité, contradictions, convergences, période ; couverture, seuils, avertissement sous 30. L’union des signatures live complètes, live partielles et historiques réglées est affichée : une signature partielle (ex. `2 \| Oui \| ? \| G4`) n’est plus masquée. |
+| `GET /api/v2/laboratoire/configuration?code=` | Fiche d'une configuration : 4 paramètres, explication, seuils d'intensité, KPI (n réglés, taux, IC 95 %, probabilité marché, contradictions, convergences) et matchs associés (live + historique) |
 | `GET /api/v2/sources/status` | Fraîcheur par source (`age_s`, `etat` ok/retard/panne), état de persistance, snapshots |
 | `GET/POST /api/v2/alertes` | État et activation/désactivation des alertes pour l’utilisateur Telegram authentifié |
 

@@ -359,6 +359,12 @@ export function buildLaboratoire({ configurations, calibrationReport, intensity 
     .sort((a, b) => b.n_matchs - a.n_matchs || b.n_regles - a.n_regles || a.code.localeCompare(b.code));
 
   const quality = configurations?.quality_report || {};
+  const catalogue = catalog.map((s) => ({
+    code: s.code,
+    complet: (s.count || 0) > 0,
+    count: s.count || 0,
+    intensite_dominante: s.dominant_intensity || null,
+  }));
   return {
     ok: true,
     bandeau: 'Outil d’étude, pas de pronostics.',
@@ -370,7 +376,125 @@ export function buildLaboratoire({ configurations, calibrationReport, intensity 
     signatures_possibles: 72,
     matchs_incomplets: configurations?.summary?.partial_signatures ?? 0,
     matchs_incoherents: quality.donnees_incoherentes ?? 0,
+    catalogue,
     signatures,
+  };
+}
+
+const FT_LABELS = { 1: 'Victoire domicile', X: 'Match nul', 2: 'Victoire extérieur', '?': 'Inconnu' };
+const BTTS_LABELS = { Oui: 'Les deux équipes marquent', Non: 'Au moins une équipe ne marque pas', '?': 'Inconnu' };
+const GOALS_LABELS = {
+  G1: 'Très faible (Under 1.5 / 2.5 / 3.5)',
+  G2: 'Modéré faible (Over 1.5 / Under 2.5 / 3.5)',
+  G3: 'Ouvert actif (Over 1.5 / 2.5 / Under 3.5)',
+  G4: 'Très offensif (Over 1.5 / 2.5 / 3.5)',
+  '?': 'Inconnu',
+};
+
+// Fiche complète d'une configuration (Phase 4 — exploration du Laboratoire).
+export function buildConfigurationDetail({ code, configurations, calibrationReport } = {}) {
+  const target = String(code || '').trim();
+  if (!target) return null;
+  const catalog = Array.isArray(configurations?.catalog_72) ? configurations.catalog_72 : [];
+  const partial = Array.isArray(configurations?.partial_signatures) ? configurations.partial_signatures : [];
+  const live = catalog.find((s) => s.code === target) || partial.find((s) => s.code === target) || null;
+  const observations = (Array.isArray(calibrationReport?.observations) ? calibrationReport.observations : []).filter(
+    (o) => o.signature_code === target
+  );
+  if (!live && observations.length === 0) return null;
+
+  const settled = observations.filter((o) => o.status === 'settled');
+  const k = settled.filter((o) => o.bf_top_won === true).length;
+  const n = settled.length;
+  const [icLower, icUpper] = wilsonInterval(k, n);
+  const probs = observations
+    .map((o) => {
+      const sides = Array.isArray(o.sides) ? o.sides : [];
+      const values = sides.map((s) => s.bf_pct).filter((p) => Number.isFinite(p));
+      return values.length ? Math.max(...values) : null;
+    })
+    .filter((p) => p !== null);
+  const dates = observations.map((o) => String(o.date || o.settled_at || o.captured_at || '').slice(0, 10)).filter(Boolean).sort();
+  const parties = target.split('|').map((p) => p.trim());
+
+  const matchsLive = (Array.isArray(configurations?.rows) ? configurations.rows : [])
+    .filter((r) => r.signature?.code === target)
+    .map((r) => ({
+      home: r.home ?? null,
+      away: r.away ?? null,
+      league: r.league ?? null,
+      kickoff: r.date ?? null,
+      source: 'live',
+      statut: r.kickoff_passed ? 'coup d’envoi passé' : 'avant coup d’envoi',
+      has_betfair: (r.markets || []).some((m) => m.source_bf),
+      has_polymarket: Boolean(r.pm_matched) || (r.markets || []).some((m) => m.source_pm),
+    }));
+  const matchsHistoriques = observations.map((o) => ({
+    home: o.home ?? null,
+    away: o.away ?? null,
+    league: o.league ?? null,
+    kickoff: o.date ?? null,
+    source: 'historique',
+    statut:
+      o.status === 'settled'
+        ? o.bf_top_won === true
+          ? 'Confirmé'
+          : o.bf_top_won === false
+          ? 'Infirmé'
+          : 'Remboursé ou non évalué'
+        : o.status === 'push'
+        ? 'Remboursé'
+        : 'En attente',
+    has_betfair: true,
+    has_polymarket: Boolean(o.pm_liquidity),
+  }));
+  const matchs = [...matchsLive, ...matchsHistoriques].slice(0, 40);
+
+  const explication =
+    `Configuration ${target} : le favori du résultat final est ${FT_LABELS[parties[0]] || parties[0] || 'inconnu'}, ` +
+    `BTTS est ${BTTS_LABELS[parties[1]] || parties[1] || 'inconnu'}, ` +
+    `le favori de la mi-temps est ${FT_LABELS[parties[2]] || parties[2] || 'inconnu'} ` +
+    `et le profil de buts est ${parties[3] || 'inconnu'}${GOALS_LABELS[parties[3]] ? ` (${GOALS_LABELS[parties[3]]})` : ''}. ` +
+    (live?.complet === false || (!live?.code && parties.includes('?'))
+      ? 'Signature incomplète : les blocs manquants restent marqués « ? », aucune valeur n’est inventée.'
+      : 'Les quatre blocs sont renseignés : cette configuration appartient au catalogue des 72 signatures.');
+
+  const parametres = [
+    { axe: 'Résultat final (1X2)', valeur: parties[0] ?? '?', definition: 'Favori du marché 1X2.' },
+    { axe: 'BTTS', valeur: parties[1] ?? '?', definition: 'Les deux équipes marquent : Oui ou Non.' },
+    { axe: 'Mi-temps', valeur: parties[2] ?? '?', definition: 'Favori du marché Résultat mi-temps.' },
+    { axe: 'Profil de buts', valeur: parties[3] ?? '?', definition: GOALS_LABELS[parties[3]] || 'Profil non connu.' },
+  ];
+
+  return {
+    ok: true,
+    code: target,
+    complet: (live?.count || 0) > 0 && !parties.includes('?'),
+    configuration: {
+      code: target,
+      parties,
+      ft: parties[0] ?? null,
+      btts: parties[1] ?? null,
+      ht: parties[2] ?? null,
+      goals_profile: parties[3] ?? null,
+      periode: dates.length ? { min_date: dates[0], max_date: dates[dates.length - 1] } : configurations?.period || null,
+    },
+    explication,
+    parametres,
+    seuils_intensite: configurations?.thresholds || {},
+    kpi: {
+      n_matchs_regles: n,
+      n_regles_live: live?.count || 0,
+      k_favori_gagnant: k,
+      taux_confirmation_pct: n > 0 ? round1((k / n) * 100) : null,
+      ic95_pct: [icLower, icUpper],
+      probabilite_marche_pct: probs.length ? round1(probs.reduce((a, b) => a + b, 0) / probs.length) : null,
+      contradictions: live?.contradictions || 0,
+      convergences: live?.convergences || 0,
+      sample_warning: n < MIN_SAMPLE ? 'échantillon trop faible' : null,
+    },
+    matchs,
+    verdict: n < MIN_SAMPLE ? null : 'À étudier : la règle reste à valider sur plus de matchs.',
   };
 }
 

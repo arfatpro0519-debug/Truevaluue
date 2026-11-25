@@ -23,6 +23,11 @@ export function renderLaboratoire() {
   return sourceBanner(state.data.sources?.sources) + `<div class="r" style="margin-bottom:10px"><div class="mt" style="font-size:18px">Laboratoire</div><button type="button" class="ch" data-tab="ec">← Retour</button></div>
   <div class="cd" style="background:var(--wb);border-color:transparent"><div class="mt" style="color:var(--wa)">Outil d’étude, pas de pronostics</div>
     <div class="sm" style="margin-top:2px">Chaque résultat affiche le nombre de matchs réglés et la période. Sous 30 matchs, aucune conclusion.</div></div>
+  <div class="cd"><label class="sm" for="config-select">Explorer une configuration (paramètres, explication, matchs, résultats)</label>
+    <select id="config-select" aria-label="Choisir une configuration" style="width:100%;font:inherit;color:inherit;background:var(--bg);border:.5px solid var(--bd);border-radius:12px;padding:10px;margin-top:6px">
+      <option value="">— Choisir une configuration —</option>
+      ${(l.catalogue || []).map((s) => `<option value="${esc(s.code)}"${state.configCode === s.code ? ' selected' : ''}>${esc(s.code)}${s.count ? ` · ${s.count} match(s)` : ''}</option>`).join('')}
+    </select></div>
   <div class="gr">
     <div><span class="sm">Signatures observées</span><b>${int(l.signatures_observees)} / ${int(l.signatures_possibles)}</b></div>
     <div><span class="sm">Matchs incomplets</span><b>${int(l.matchs_incomplets)}</b></div>

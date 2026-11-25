@@ -7,6 +7,7 @@ import { renderEcarts, renderDetail, markOnboard } from './modules/views/ecarts.
 import { renderMatchs, matchList } from './modules/views/matchs.js';
 import { renderBilan } from './modules/views/bilan.js';
 import { renderLaboratoire } from './modules/views/laboratoire.js';
+import { renderConfiguration } from './modules/views/configuration.js';
 
 let currentDetail = null;
 let searchTimer = null;
@@ -42,6 +43,7 @@ function view() {
   if (state.tab === 'ma') return renderMatchs();
   if (state.tab === 'bi') return renderBilan();
   if (state.tab === 'lb') return renderLaboratoire();
+  if (state.tab === 'cf') return renderConfiguration();
   return renderEcarts();
 }
 
@@ -66,6 +68,11 @@ async function load() {
       await Promise.all([common, api.matchs(state.query).then((d) => { state.data.ma = d; })]);
     } else if (state.tab === 'bi') {
       await Promise.all([common, api.bilan().then((d) => { state.data.bi = d; })]);
+    } else if (state.tab === 'cf') {
+      await Promise.all([
+        common,
+        api.configuration(state.configCode).then((d) => { state.data.cf = d; }),
+      ]);
     } else {
       await Promise.all([common, api.laboratoire(state.intensity).then((d) => { state.data.lb = d; })]);
     }
@@ -198,6 +205,15 @@ document.addEventListener('click', async (e) => {
     await load();
     toast('Données actualisées.');
   }
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'config-select') return;
+  const code = e.target.value;
+  if (!code) return;
+  state.configCode = code;
+  state.data.cf = null;
+  go('cf');
 });
 
 document.addEventListener('input', (e) => {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { createApp } from '../server.js';
-import { buildEcarts, buildLaboratoire } from '../src/apiV2.js';
+import { buildConfigurationDetail, buildEcarts, buildLaboratoire } from '../src/apiV2.js';
 import { CalibrationStore } from '../src/calibration.js';
 import { MarketKey } from '../src/market.js';
 
@@ -158,6 +158,15 @@ test('Phase 3 : les 6 routes v2 répondent au contrat sans clé interne', async 
       if (s.n_matchs < 30) assert.equal(s.verdict, null);
     }
 
+    if (lab.catalogue.length > 0) {
+      const code = encodeURIComponent(lab.catalogue[0].code);
+      const fiche = await fetch(`${base}/api/v2/laboratoire/configuration?code=${code}`).then((r) => r.json());
+      assert.equal(fiche.ok, true);
+      assert.equal(fiche.parametres.length, 4);
+      assert.ok(Object.hasOwn(fiche.kpi, 'n_matchs_regles'));
+      assert.ok(Array.isArray(fiche.matchs));
+    }
+
     const status = await fetch(`${base}/api/v2/sources/status`).then((r) => r.json());
     assert.equal(status.ok, true);
     assert.equal(status.sources.length, 4);
@@ -262,6 +271,45 @@ test('Laboratoire : les signatures réglées historiques apparaissent même si e
   assert.equal(lab.signatures[0].taux_confirmation_pct, 50);
   assert.equal(lab.signatures[0].probabilite_marche_pct, 43.4);
   assert.deepEqual(lab.signatures[0].ic95_pct[0] < 50, true);
+});
+
+test('Configuration : fiche avec paramètres, explication, matchs et KPI', () => {
+  const code = '1 | Oui | X | G2';
+  const configurations = {
+    catalog_72: [{ code, ft: '1', btts: 'Oui', ht: 'X', goals_profile: 'G2', count: 2, contradictions: 0, convergences: 1, dominant_intensity: 'Faible' }],
+    partial_signatures: [],
+    rows: [
+      {
+        fixture_key: 'a-b', home: 'A', away: 'B', league: 'L', date: '2026-11-27T19:00:00Z',
+        kickoff_passed: false, pm_matched: true, signature: { code }, markets: [{ source_bf: true, source_pm: true }],
+      },
+    ],
+    thresholds: { equilibreMaxPp: 4, faibleMaxPp: 12, modereeMaxPp: 24, forteMaxPp: 40 },
+    period: { min_date: '2026-11-20', max_date: '2026-11-27' },
+  };
+  const report = {
+    observations: [
+      { signature_code: code, status: 'settled', date: '2026-11-24', home: 'C', away: 'D', league: 'L1', bf_top_won: true, sides: [{ label: '1', bf_pct: 55 }] },
+      { signature_code: code, status: 'settled', date: '2026-11-25', home: 'E', away: 'F', league: 'L1', bf_top_won: false, sides: [{ label: '1', bf_pct: 57 }] },
+    ],
+  };
+  const d = buildConfigurationDetail({ code, configurations, calibrationReport: report });
+  assert.equal(d.ok, true);
+  assert.equal(d.parametres.length, 4);
+  assert.equal(d.parametres[3].valeur, 'G2');
+  assert.ok(d.explication.includes('Victoire domicile'));
+  assert.equal(d.kpi.n_matchs_regles, 2);
+  assert.equal(d.kpi.k_favori_gagnant, 1);
+  assert.equal(d.kpi.taux_confirmation_pct, 50);
+  assert.equal(d.kpi.convergences, 1);
+  assert.equal(d.matchs.length, 3);
+  assert.ok(d.matchs.some((m) => m.source === 'live'));
+  assert.ok(d.matchs.some((m) => m.statut === 'Confirmé'));
+  assert.equal(buildConfigurationDetail({ code: 'inconnu', configurations, calibrationReport: report }), null);
+
+  const lab = buildLaboratoire({ configurations, calibrationReport: report });
+  assert.equal(lab.catalogue.length, 1);
+  assert.equal(lab.catalogue[0].code, code);
 });
 
 test('Phase 6 : SHOW_PM_LINKS=0 retire les liens Polymarket de l’API v2', () => {

@@ -37,6 +37,7 @@ import * as th from './src/thresholds.js';
 
 import {
   buildBilan,
+  buildConfigurationDetail,
   buildEcarts,
   buildEcartDetail,
   buildLaboratoire,
@@ -1224,6 +1225,24 @@ export function createApp(sourcesOrCfg = null) {
     } catch (err) {
       console.error('Erreur /api/v2/laboratoire:', err);
       return sendError(req, res, 502, 'Laboratoire momentanément indisponible.');
+    }
+  });
+
+  // Fiche d'une configuration, ouverte depuis le sélecteur du Laboratoire.
+  app.get('/api/v2/laboratoire/configuration', async (req, res) => {
+    try {
+      const configurations = await v2Configurations();
+      const report = calibration.report({ limit: 500, minN: cfg.calibrationMinN });
+      const detail = buildConfigurationDetail({
+        code: req.query?.code,
+        configurations,
+        calibrationReport: report,
+      });
+      if (!detail) return sendError(req, res, 404, 'Configuration introuvable.');
+      return sendJson(req, res, 200, detail);
+    } catch (err) {
+      console.error('Erreur /api/v2/laboratoire/configuration:', err);
+      return sendError(req, res, 502, 'Configuration momentanément indisponible.');
     }
   });
 

@@ -61,6 +61,7 @@ export const api = {
   matchs: (q = '') => request(`/matchs?q=${encodeURIComponent(q)}`),
   bilan: () => request('/bilan'),
   laboratoire: (intensity = 'all') => request(`/laboratoire?intensity=${encodeURIComponent(intensity)}`),
+  configuration: (code) => request(`/laboratoire/configuration?code=${encodeURIComponent(code)}`),
   sources: () => request('/sources/status'),
   alertes: () => request('/alertes'),
   setAlertes: (actif, chatId = null) =>
