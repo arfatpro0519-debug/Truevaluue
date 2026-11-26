@@ -1,0 +1,12 @@
+name = "truevalue-cron"
+main = "cron-worker.js"
+compatibility_date = "2026-01-01"
+
+# Plan gratuit : déclencheurs cron (1 tâche toutes les 10 minutes).
+[triggers]
+crons = ["*/10 * * * *"]
+
+# RENDER_BASE_URL et CRON_SECRET sont des secrets :
+#   npx wrangler secret put RENDER_BASE_URL
+#   npx wrangler secret put CRON_SECRET
+#   npx wrangler deploy

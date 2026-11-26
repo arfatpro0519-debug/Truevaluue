@@ -1,0 +1,47 @@
+# Render Blueprint — service web gratuit.
+# Déployer via Render Dashboard > New > Blueprint > ce dépôt, ou `render blueprint launch`.
+# Les variables `sync: false` sont à renseigner dans le dashboard Render (aucun secret ici).
+
+services:
+  - type: web
+    name: truevalue
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: STORAGE_BACKEND
+        value: cloudflare
+      - key: SYNC_MODE
+        value: external
+      - key: SYNC_INTERVAL_SECS
+        value: 600
+      - key: PAYMENTS_ENABLED
+        value: "0"
+      - key: SHOW_PM_LINKS
+        value: "1"
+      - key: ADMIN_PASSCODE
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_KV_NAMESPACE_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: SPORTSCORE_API_KEY
+        sync: false
+      - key: SCRAPER_CONTACT
+        sync: false

@@ -65,6 +65,13 @@ export function loadConfig() {
   alertMaxAgeS: envInt('ALERT_MAX_AGE_S', 600),
   alertDailyCap: envInt('ALERT_DAILY_CAP', 10),
   sourceStaleSecs: envInt('SOURCE_STALE_SECS', 600),
+  // Déploiement : stockage distant Cloudflare KV et cron externe.
+  storageBackend: env('STORAGE_BACKEND') || 'local',
+  cloudflareAccountId: env('CLOUDFLARE_ACCOUNT_ID'),
+  cloudflareKvNamespaceId: env('CLOUDFLARE_KV_NAMESPACE_ID'),
+  cloudflareApiToken: env('CLOUDFLARE_API_TOKEN'),
+  cronSecret: env('CRON_SECRET'),
+  syncMode: env('SYNC_MODE') || 'internal',
     arbworldBase: env('ARBWORLD_BASE') || 'https://arbworld.net/fr/moneyway',
     cacheTtlSecs: envInt('CACHE_TTL_SECS', 20),
     staleTtlSecs: envInt('STALE_TTL_SECS', 900),

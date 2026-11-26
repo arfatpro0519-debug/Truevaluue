@@ -22,6 +22,7 @@ import {
   verifyTelegramInitData,
 } from './src/auth.js';
 import { CalibrationStore } from './src/calibration.js';
+import { createCloudflareStorage } from './src/cloudflareStorage.js';
 import { buildComparison } from './src/compare.js';
 import { buildConfigurations, buildSignals, SIGNAL_PRESETS } from './src/configurations.js';
 import { loadConfig } from './src/config.js';
@@ -182,7 +183,9 @@ export function createSources(cfg = loadConfig()) {
         host: cfg.sportscoreHost,
       }
     ),
-    calibration: new CalibrationStore(path.join(dataDir, 'observations.json')),
+    calibration: new CalibrationStore(path.join(dataDir, 'observations.json'), {
+      forceJson: cfg.storageBackend === 'cloudflare',
+    }),
   };
 }
 
@@ -207,6 +210,9 @@ export function createApp(sourcesOrCfg = null) {
       reportError: (ok, operation, err) => calibration._recordPersistence?.(ok, operation, err),
     });
   sources.gapStore = gapStore;
+  // Stockage distant (Render n'a pas de disque persistant en plan gratuit).
+  const cloudflare = sources.cloudflare || createCloudflareStorage({ cfg });
+  sources.cloudflare = cloudflare;
   // Alertes Telegram : mêmes réglages et abonnements que le reste de l'application.
   const alerts = sources.alerts || new TelegramAlerts({ cfg, calibration });
   sources.alerts = alerts;
@@ -228,6 +234,29 @@ export function createApp(sourcesOrCfg = null) {
     }
   };
   sources.runAlertTick = runAlertTick;
+
+  // Synchronisation complète + sauvegarde Cloudflare, utilisée par le cron externe.
+  const runSyncAndFlush = async () => {
+    const [cmpResult, sigResult] = await Promise.all([
+      buildComparison({ scraper, polymarket, force: false, maxFixtures: 28 }),
+      buildSignals({ scraper, polymarket, force: false, maxPmLookup: 28 }),
+    ]);
+    const snapshots = recordGapSnapshots(sources, cmpResult.rows);
+    const recorded = calibration.recordFromComparison(cmpResult.rows);
+    const recordedSignals = calibration.recordFromSignals(sigResult);
+    const settlement = await calibration.settle({ espn, sportscore, cfg });
+    const alertes = await runAlertTick();
+    const stockage = await cloudflare.flush(path.dirname(calibration.filePath));
+    return {
+      recorded,
+      recorded_signals: recordedSignals,
+      settlement,
+      gap_snapshots: snapshots,
+      alertes,
+      stockage,
+    };
+  };
+  sources.runSyncAndFlush = runSyncAndFlush;
 
   const app = express();
 
@@ -255,7 +284,7 @@ export function createApp(sourcesOrCfg = null) {
   const sensitiveLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20 });
 
   app.use('/api', apiLimiter);
-  app.use(['/api/auth', '/api/billing', '/api/v2', '/api/calibration/sync'], sensitiveLimiter);
+  app.use(['/api/auth', '/api/billing', '/api/v2', '/api/calibration/sync', '/api/cron/sync'], sensitiveLimiter);
 
   // Les routes /api/* historiques restent intactes mais sont marquées dépréciées (§2.7).
   app.use('/api', (req, res, next) => {
@@ -1153,6 +1182,23 @@ export function createApp(sourcesOrCfg = null) {
     });
   });
 
+  // Cron Cloudflare -> Render : sync + flush KV, protégé par un secret partagé.
+  app.post('/api/cron/sync', async (req, res) => {
+    if (!cfg.cronSecret) {
+      return sendError(req, res, 503, 'CRON_SECRET non configuré sur ce serveur.');
+    }
+    const provided = String(req.headers?.['x-cron-secret'] || '');
+    if (!provided || !constantTimeStringEqual(provided, cfg.cronSecret)) {
+      return sendError(req, res, 401, 'Secret cron invalide.');
+    }
+    try {
+      return sendJson(req, res, 200, { ok: true, ...(await runSyncAndFlush()) });
+    } catch (err) {
+      console.error('Erreur /api/cron/sync:', err);
+      return sendError(req, res, 502, 'Synchronisation momentanément indisponible.');
+    }
+  });
+
   /* ---- API v2 : surface publique, snake_case, aucune clé interne ---- */
   const v2Configurations = () =>
     buildConfigurations({ scraper, polymarket, force: false, maxPmLookup: 28 });
@@ -1382,12 +1428,36 @@ export async function startServer(
   if (IS_PROD && !sources.cfg?.adminPasscode) {
     throw new Error('ADMIN_PASSCODE doit être défini pour démarrer en production.');
   }
+
+  // Render gratuit : pas de disque persistant. On hydrate depuis Cloudflare KV
+  // avant de construire les stores, puis on-force le mode JSON.
+  if (sources.cfg?.storageBackend === 'cloudflare') {
+    const cloudflare = createCloudflareStorage({ cfg: sources.cfg });
+    sources.cloudflare = cloudflare;
+    if (cloudflare.enabled) {
+      const dataDir = path.dirname(sources.calibration.filePath);
+      const hydrated = await cloudflare.hydrate(dataDir);
+      console.log(`Cloudflare KV : ${hydrated.loaded.length} fichier(s) hydraté(s).`);
+      sources.calibration = new CalibrationStore(path.join(dataDir, 'observations.json'), {
+        forceJson: true,
+      });
+      sources.gapStore = new GapSnapshotsStore({
+        db: null,
+        filePath: path.join(dataDir, 'gap_snapshots.json'),
+        reportError: (ok, operation, err) => sources.calibration._recordPersistence?.(ok, operation, err),
+      });
+    } else {
+      console.warn(`Cloudflare KV inactif — variables manquantes : ${cloudflare.missing.join(', ')}`);
+    }
+  }
+
   const app = createApp(sources);
   const listenPort = port ?? sources.cfg?.port ?? 3000;
 
   return new Promise((resolve, reject) => {
     const server = app.listen(listenPort, host, () => {
-      const intervalSecs = Number(sources.cfg?.syncIntervalSecs ?? 0);
+      const intervalSecs =
+        sources.cfg?.syncMode === 'external' ? 0 : Number(sources.cfg?.syncIntervalSecs ?? 0);
       let syncTimer = null;
       if (Number.isFinite(intervalSecs) && intervalSecs > 0) {
         const runBackgroundSync = async () => {
@@ -1419,6 +1489,9 @@ export async function startServer(
               sportscore: sources.sportscore,
               cfg: sources.cfg,
             });
+            if (sources.cloudflare?.enabled) {
+              await sources.cloudflare.flush(path.dirname(sources.calibration.filePath));
+            }
           } catch (err) {
             console.error('Erreur synchronisation automatique:', err);
           }

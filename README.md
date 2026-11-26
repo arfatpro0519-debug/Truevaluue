@@ -19,4 +19,6 @@
 - **Contenu lié aux paris** : mention 18+ et absence de promesse de gain dans l’UI et les messages Telegram ; vérifier les règles Telegram/ANJ avant toute monétisation.
 - **Liens Polymarket** : disponibilité légale variable selon le pays (France notamment). `SHOW_PM_LINKS=0` retire tous les liens et garde `pm_url: null` dans l’API v2.
 
+Déploiement prévu : Render (plan gratuit) + cron Cloudflare + stockage Cloudflare Workers KV — guide complet dans [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). Rien n'est poussé sur GitHub pour l'instant.
+
 Architecture, tables et flux de données : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Audit initial et décisions de refonte : [`docs/AUDIT.md`](docs/AUDIT.md).

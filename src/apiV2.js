@@ -535,6 +535,15 @@ export function buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore,
     sources,
     seuil_retard_s: staleSecs,
     persistance: calibration?.getPersistenceStatus?.() || { etat: 'indisponible', erreur_persistance: null },
+    stockage: {
+      backend: cfg?.storageBackend || 'local',
+      mode_cron: cfg?.syncMode || 'internal',
+      cloudflare_kv: cfg?.storageBackend === 'cloudflare'
+        ? {
+            actif: Boolean(cfg?.cloudflareAccountId && cfg?.cloudflareKvNamespaceId && cfg?.cloudflareApiToken),
+          }
+        : null,
+    },
     snapshots: gapStore?.status?.() || null,
   };
 }

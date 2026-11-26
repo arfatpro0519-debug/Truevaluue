@@ -873,7 +873,7 @@ function selectBestCategory(byCategory, minN = DEFAULT_CALIBRATION_MIN_N) {
 }
 
 export class CalibrationStore {
-  constructor(filePath = path.resolve(process.cwd(), 'data', 'observations.json')) {
+  constructor(filePath = path.resolve(process.cwd(), 'data', 'observations.json'), { forceJson = false } = {}) {
     this.filePath = filePath;
     this.signalFilePath = path.join(path.dirname(filePath), 'signal_history.json');
     this.metaFilePath = path.join(path.dirname(filePath), 'store-meta.json');
@@ -881,7 +881,7 @@ export class CalibrationStore {
       ? filePath
       : path.join(path.dirname(filePath), 'truevalue.db');
     this.persistenceStatus = { last_ok_at: null, last_error: null };
-    this.db = this._openDb();
+    this.db = forceJson ? null : this._openDb();
     this.storageMode = this.db ? 'sqlite' : 'json';
     this.subscriptions = new SubscriptionStore({
       db: this.db,
