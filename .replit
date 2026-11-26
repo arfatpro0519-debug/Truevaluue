@@ -1,6 +1,10 @@
 run = "npm start"
-modules = ["nodejs-20"]
+modules = ["nodejs-22"]
 hidden = [".config", ".local", "node_modules"]
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
 
 [[ports]]
 localPort = 8080

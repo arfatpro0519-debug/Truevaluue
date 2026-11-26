@@ -257,15 +257,15 @@ function evaluateSideCandidate(
   const buyEdge = typeof side.buy_edge_pp === 'number' ? side.buy_edge_pp : null;
   const sellEdge = typeof side.sell_edge_pp === 'number' ? side.sell_edge_pp : null;
 
-  let direction = null;
-  let netEdge = null;
-  let pmExecPct = null;
-  let pmExecOdds = null;
-  let propPct = null;
-  let propOdds = null;
-  let bfPropPct = null;
-  let bfPropOdds = null;
-  let action = null;
+  let direction;
+  let netEdge;
+  let pmExecPct;
+  let pmExecOdds;
+  let propPct;
+  let propOdds;
+  let bfPropPct;
+  let bfPropOdds;
+  let action;
 
   const canBuy =
     buyEdge !== null &&

@@ -160,7 +160,8 @@ test('1.5 une erreur de persistance est remontée dans getPersistenceStatus', ()
   const blocker = path.join(dir, 'blocker');
   try {
     fs.writeFileSync(blocker, 'x', 'utf8');
-    const store = new CalibrationStore(path.join(dir, 'observations.json'));
+    // Le test vise la voie JSON : sous Node 22 node:sqlite existe, on force le repli.
+    const store = new CalibrationStore(path.join(dir, 'observations.json'), { forceJson: true });
     store.filePath = path.join(blocker, 'observations.json');
     const previous = console.error;
     console.error = () => {};

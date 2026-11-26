@@ -175,7 +175,7 @@ function computeNormalizedFromOdds(oddsArr) {
 
 function extractBfStructuredSides(marketKey, bfRow) {
   if (!bfRow) return null;
-  let slots = [];
+  let slots;
   if (marketKey === MarketKey.OneXTwo || marketKey === MarketKey.HalfTime) {
     slots = [
       { label: '1', idx: 0 },

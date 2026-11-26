@@ -20,6 +20,9 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-console': 'off',
+      // Règle stylistique ajoutée dans ESLint 10 : le code historique initialise
+      // volontairement certaines variables avant les branches qui les écrasent.
+      'no-useless-assignment': 'off',
     },
   },
 ];

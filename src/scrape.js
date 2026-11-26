@@ -27,7 +27,7 @@ export async function defaultHttpTransport(url, etag, lastModified, userAgent) {
       signal: AbortSignal.timeout(9_000),
     });
   } catch (err) {
-    throw new Error(`réseau : ${err.message || err}`);
+    throw new Error(`réseau : ${err.message || err}`, { cause: err });
   }
 
   const status = res.status;
