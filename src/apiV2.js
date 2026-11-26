@@ -1,6 +1,8 @@
 // Surface /api/v2 : constructions de réponses contractuelles, sans clé interne ni score inventé.
 // Toutes les valeurs absentes restent null ; aucun chiffre n'est affiché sans son effectif.
 
+import { MarketKey, marketDef } from './market.js';
+
 const MIN_SAMPLE = 30;
 const round1 = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 
@@ -391,6 +393,106 @@ const GOALS_LABELS = {
   '?': 'Inconnu',
 };
 
+// Issue réelle d'une observation, déduite du score (jamais inventée).
+function issueReelle(marketKey, obs) {
+  const hs = obs?.home_score;
+  const as = obs?.away_score;
+  if (!Number.isFinite(hs) || !Number.isFinite(as)) return null;
+  if (marketKey === MarketKey.OneXTwo) return hs > as ? '1' : hs < as ? '2' : 'X';
+  if (marketKey === MarketKey.Btts) return hs > 0 && as > 0 ? 'Oui' : 'Non';
+  if (marketKey === MarketKey.HalfTime) {
+    const hht = obs?.home_ht;
+    const aht = obs?.away_ht;
+    if (!Number.isFinite(hht) || !Number.isFinite(aht)) return null;
+    return hht > aht ? '1' : hht < aht ? '2' : 'X';
+  }
+  if (marketKey === MarketKey.DrawNoBet) return hs === as ? 'Remboursé' : hs > as ? '1' : '2';
+  const line = {
+    [MarketKey.OverUnder15]: 1.5,
+    [MarketKey.OverUnder25]: 2.5,
+    [MarketKey.OverUnder35]: 3.5,
+  }[marketKey];
+  if (line !== undefined) return hs + as > line ? 'Over' : 'Under';
+  return null;
+}
+
+function favoriteObservation(obs) {
+  const sides = Array.isArray(obs?.sides) ? obs.sides : [];
+  const ranked = sides.filter((s) => Number.isFinite(s.bf_pct)).sort((a, b) => b.bf_pct - a.bf_pct);
+  return ranked[0]?.label ?? null;
+}
+
+function libelleIssue(marketKey, issue) {
+  if (issue === '1') return marketKey === MarketKey.HalfTime ? 'Domicile (MT)' : 'Domicile';
+  if (issue === '2') return marketKey === MarketKey.HalfTime ? 'Extérieur (MT)' : 'Extérieur';
+  if (issue === 'X' || issue === 'N') return 'Nul';
+  if (issue === 'Oui' || issue === 'Non') return issue === 'Oui' ? 'BTTS Oui' : 'BTTS Non';
+  if (issue === 'Under' || issue === 'Over') {
+    const line = {
+      [MarketKey.OverUnder15]: '1,5',
+      [MarketKey.OverUnder25]: '2,5',
+      [MarketKey.OverUnder35]: '3,5',
+    }[marketKey];
+    return issue === 'Under' ? `Moins de ${line || ''} buts` : `Plus de ${line || ''} buts`;
+  }
+  return issue;
+}
+
+function performanceParMarche(observations) {
+  const byMarket = new Map();
+  for (const o of observations) {
+    const key = o.market || '?';
+    let bucket = byMarket.get(key);
+    if (!bucket) {
+      bucket = { n: 0, k: 0, probs: [], issues: new Map() };
+      byMarket.set(key, bucket);
+    }
+    bucket.n += 1;
+    if (o.bf_top_won === true) bucket.k += 1;
+    const fav = favoriteObservation(o);
+    const probs = (o.sides || []).filter((s) => Number.isFinite(s.bf_pct)).map((s) => s.bf_pct);
+    const p = probs.length ? Math.max(...probs) : null;
+    if (Number.isFinite(p)) bucket.probs.push(p);
+    const outcome = issueReelle(key, o);
+    for (const label of new Set([fav, outcome].filter(Boolean))) {
+      if (!bucket.issues.has(label)) {
+        bucket.issues.set(label, { issue: label, n_observations: 0, n_favori: 0, k_favori_gagnant: 0 });
+      }
+      const row = bucket.issues.get(label);
+      if (outcome === label) row.n_observations += 1;
+      if (fav === label) {
+        row.n_favori += 1;
+        if (outcome === label) row.k_favori_gagnant += 1;
+      }
+    }
+  }
+  return [...byMarket.entries()]
+    .map(([key, b]) => {
+      const [lo, hi] = wilsonInterval(b.k, b.n);
+      return {
+        marche: key,
+        libelle: marketDef(key)?.label || key,
+        n: b.n,
+        k_favori_gagnant: b.k,
+        taux_confirmation_pct: b.n > 0 ? round1((b.k / b.n) * 100) : null,
+        ic95_pct: [lo, hi],
+        probabilite_marche_pct: b.probs.length ? round1(b.probs.reduce((a, c) => a + c, 0) / b.probs.length) : null,
+        sample_warning: b.n < MIN_SAMPLE ? 'échantillon trop faible' : null,
+        issues: [...b.issues.values()]
+          .map((i) => ({
+            issue: i.issue,
+            libelle: libelleIssue(key, i.issue),
+            n_observations: i.n_observations,
+            n_favori: i.n_favori,
+            k_favori_gagnant: i.k_favori_gagnant,
+            taux_favori_pct: i.n_favori > 0 ? round1((i.k_favori_gagnant / i.n_favori) * 100) : null,
+          }))
+          .sort((a, b2) => b2.n_observations - a.n_observations || a.issue.localeCompare(b2.issue)),
+      };
+    })
+    .sort((a, b) => b.n - a.n || a.marche.localeCompare(b.marche));
+}
+
 // Fiche complète d'une configuration (Phase 4 — exploration du Laboratoire).
 export function buildConfigurationDetail({ code, configurations, calibrationReport } = {}) {
   const target = String(code || '').trim();
@@ -494,6 +596,7 @@ export function buildConfigurationDetail({ code, configurations, calibrationRepo
       sample_warning: n < MIN_SAMPLE ? 'échantillon trop faible' : null,
     },
     matchs,
+    marches: performanceParMarche(settled),
     verdict: n < MIN_SAMPLE ? null : 'À étudier : la règle reste à valider sur plus de matchs.',
   };
 }

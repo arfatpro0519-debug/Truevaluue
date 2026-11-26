@@ -289,8 +289,9 @@ test('Configuration : fiche avec paramètres, explication, matchs et KPI', () =>
   };
   const report = {
     observations: [
-      { signature_code: code, status: 'settled', date: '2026-11-24', home: 'C', away: 'D', league: 'L1', bf_top_won: true, sides: [{ label: '1', bf_pct: 55 }] },
-      { signature_code: code, status: 'settled', date: '2026-11-25', home: 'E', away: 'F', league: 'L1', bf_top_won: false, sides: [{ label: '1', bf_pct: 57 }] },
+      { signature_code: code, status: 'settled', date: '2026-11-24', home: 'C', away: 'D', league: 'L1', market: '1x2', home_score: 2, away_score: 0, bf_top_won: true, sides: [{ label: '1', bf_pct: 55 }, { label: 'X', bf_pct: 25 }] },
+      { signature_code: code, status: 'settled', date: '2026-11-25', home: 'E', away: 'F', league: 'L1', market: '1x2', home_score: 0, away_score: 1, bf_top_won: false, sides: [{ label: '1', bf_pct: 57 }, { label: '2', bf_pct: 20 }] },
+      { signature_code: code, status: 'settled', date: '2026-11-26', home: 'G', away: 'H', league: 'L1', market: 'btts', home_score: 1, away_score: 1, bf_top_won: true, sides: [{ label: 'Oui', bf_pct: 60 }, { label: 'Non', bf_pct: 40 }] },
     ],
   };
   const d = buildConfigurationDetail({ code, configurations, calibrationReport: report });
@@ -298,11 +299,23 @@ test('Configuration : fiche avec paramètres, explication, matchs et KPI', () =>
   assert.equal(d.parametres.length, 4);
   assert.equal(d.parametres[3].valeur, 'G2');
   assert.ok(d.explication.includes('Victoire domicile'));
-  assert.equal(d.kpi.n_matchs_regles, 2);
-  assert.equal(d.kpi.k_favori_gagnant, 1);
-  assert.equal(d.kpi.taux_confirmation_pct, 50);
+  assert.equal(d.kpi.n_matchs_regles, 3);
+  assert.equal(d.kpi.k_favori_gagnant, 2);
+  assert.equal(d.kpi.taux_confirmation_pct, 66.7);
   assert.equal(d.kpi.convergences, 1);
-  assert.equal(d.matchs.length, 3);
+  assert.equal(d.matchs.length, 4);
+  assert.equal(d.marches.length, 2);
+  const oneXTwo = d.marches.find((m) => m.marche === '1x2');
+  assert.equal(oneXTwo.n, 2);
+  assert.equal(oneXTwo.k_favori_gagnant, 1);
+  const domicile = oneXTwo.issues.find((i) => i.issue === '1');
+  assert.equal(domicile.libelle, 'Domicile');
+  assert.equal(domicile.n_observations, 1);
+  assert.equal(domicile.n_favori, 2);
+  assert.equal(domicile.k_favori_gagnant, 1);
+  const btts = d.marches.find((m) => m.marche === 'btts');
+  assert.equal(btts.issues.find((i) => i.issue === 'Oui').n_observations, 1);
+  assert.equal(btts.issues.find((i) => i.issue === 'Oui').taux_favori_pct, 100);
   assert.ok(d.matchs.some((m) => m.source === 'live'));
   assert.ok(d.matchs.some((m) => m.statut === 'Confirmé'));
   assert.equal(buildConfigurationDetail({ code: 'inconnu', configurations, calibrationReport: report }), null);

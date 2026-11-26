@@ -27,6 +27,15 @@ export function renderConfiguration() {
     ${(c.parametres || []).map((p) => `<div class="rw" style="display:block"><b>${esc(p.axe)}</b><div class="sm">Valeur : ${esc(p.valeur)} · ${esc(p.definition)}</div></div>`).join('')}
     <div class="sm" style="margin-top:8px">Seuils d’intensité : Équilibre &lt; ${f1(c.seuils_intensite?.equilibreMaxPp)} pts · Faible &lt; ${f1(c.seuils_intensite?.faibleMaxPp)} · Modérée &lt; ${f1(c.seuils_intensite?.modereeMaxPp)} · Forte &lt; ${f1(c.seuils_intensite?.forteMaxPp)}.</div>
   </div>
+  <div class="cd"><div class="mt">Performance par marché</div>
+    <div class="sm">Taux de confirmation du favori Betfair après le match, avec son effectif. Aucune conclusion sous 30 matchs.</div>
+    ${(c.marches || []).length
+      ? c.marches.map((m) => `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">${esc(m.libelle)} · ${f1(m.taux_confirmation_pct)} % (n=${int(m.n)})</summary>
+          <div class="sm" style="margin:6px 0">Favori gagnant ${int(m.k_favori_gagnant)}/${int(m.n)} · IC 95 % [${f1(m.ic95_pct?.[0])} ; ${f1(m.ic95_pct?.[1])}] · prob. marché ${f1(m.probabilite_marche_pct)} %${m.sample_warning ? ' · échantillon trop faible' : ''}</div>
+          ${m.issues.map((i) => `<div class="rw"><div><b>${esc(i.libelle)}</b><div class="sm">Observé ${int(i.n_observations)} fois · favori ${int(i.n_favori)} fois</div></div><span class="tag ac">${i.n_favori ? `${f1(i.taux_favori_pct)} % fav.` : '—'}</span></div>`).join('')}
+        </details>`).join('')
+      : '<p class="sm">Aucun marché réglé pour cette configuration.</p>'}
+  </div>
   <div class="cd"><div class="mt">Explication</div><p class="sm" style="color:var(--tx);margin:6px 0">${esc(c.explication)}</p>
     ${c.verdict ? `<div class="sm">${esc(c.verdict)}</div>` : '<div class="sm">Aucun verdict tant que l’échantillon reste sous 30 matchs réglés.</div>'}</div>
   <div class="cd"><div class="mt">Matchs associés</div>

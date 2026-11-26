@@ -110,6 +110,7 @@ test('Phase 4 : vocabulaire corrigé et appels v2 réels dans le code source', (
   const cfgView = fs.readFileSync(path.join(ROOT, 'site/modules/views/configuration.js'), 'utf8');
   assert.ok(cfgView.includes('Paramètres de la configuration'));
   assert.ok(cfgView.includes('Matchs associés'));
+  assert.ok(cfgView.includes('Performance par marché'));
   assert.ok(cfgView.includes('n_matchs_regles'));
   for (const view of ['ecarts', 'matchs', 'bilan', 'laboratoire']) {
     const src = fs.readFileSync(path.join(ROOT, `site/modules/views/${view}.js`), 'utf8');
