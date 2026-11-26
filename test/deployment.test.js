@@ -35,7 +35,7 @@ test('Cloudflare KV : hydratation et sauvegarde des 4 fichiers sans dépendance'
 
   const flushed = await store.flush(dir);
   assert.deepEqual(flushed.saved, ['observations.json', 'signal_history.json', 'store-meta.json'].filter((f) => fs.existsSync(path.join(dir, f))));
-  assert.ok(calls.every((c) => c.url.includes('/accounts/acc/storage/kv/namespaces/ns/keys/')));
+  assert.ok(calls.every((c) => c.url.includes('/accounts/acc/storage/kv/namespaces/ns/values/')));
   assert.ok(calls.every((c) => c.options.headers.Authorization === 'Bearer token'));
 });
 

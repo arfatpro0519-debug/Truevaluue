@@ -16,7 +16,8 @@ export function createCloudflareStorage({ cfg = {}, fetchImpl = fetch } = {}) {
   const namespace = cfg.cloudflareKvNamespaceId || null;
   const token = cfg.cloudflareApiToken || null;
   const enabled = cfg.storageBackend === 'cloudflare' && Boolean(account && namespace && token);
-  const base = `https://api.cloudflare.com/client/v4/accounts/${account}/storage/kv/namespaces/${namespace}/keys`;
+  // Lecture/écriture de valeurs : /values/:key (le chemin /keys/ sert à lister les clés).
+  const base = `https://api.cloudflare.com/client/v4/accounts/${account}/storage/kv/namespaces/${namespace}/values`;
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
   const missing = [];
