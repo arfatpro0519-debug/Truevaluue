@@ -84,6 +84,43 @@ test('5.2 anti-spam : un envoi par couple match+issue et plafond quotidien', asy
   }
 });
 
+test('5.2 anti-spam par abonné : chaque destinataire reçoit la même alerte', async () => {
+  const { dir, calibration } = makeCalibration();
+  try {
+    const sent = [];
+    const a = new TelegramAlerts({ cfg: {}, calibration, sendMessage: async (m) => sent.push(m.chat_id) });
+    a.subscribe('u1', 'chat1');
+    a.subscribe('u2', 'chat2');
+    const first = await a.evaluateAndSend({ ecarts: [card()], sourcesStatus: sourcesOk, nowMs: NOW });
+    assert.equal(first.envoyees, 2);
+    assert.deepEqual(sent.slice().sort(), ['chat1', 'chat2']);
+    const second = await a.evaluateAndSend({ ecarts: [card()], sourcesStatus: sourcesOk, nowMs: NOW });
+    assert.equal(second.envoyees, 0);
+    assert.equal(sent.length, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('5.1 les sources de score ne bloquent pas une alerte Betfair × Polymarket', () => {
+  const { dir, calibration } = makeCalibration();
+  try {
+    const a = new TelegramAlerts({ cfg: {}, calibration });
+    const status = {
+      sources: [
+        { nom: 'betfair', etat: 'ok' },
+        { nom: 'polymarket', etat: 'ok' },
+        { nom: 'espn', etat: 'panne' },
+        { nom: 'sportscore', etat: 'panne' },
+      ],
+    };
+    assert.equal(a.isEligible(card(), status, NOW), true);
+    assert.equal(a.isEligible(card({ fixture_key: 'a-b' }), sourcesOk, NOW), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('5.3 et 5.4 commandes webhook avec secret, désabonnement immédiat', async () => {
   const { dir, calibration } = makeCalibration();
   const messages = [];

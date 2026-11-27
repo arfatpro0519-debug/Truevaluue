@@ -104,7 +104,11 @@ export class TelegramAlerts {
     if (ages.length < 2) return false;
     if (ages.some((age) => age > this.rules.maxAgeS)) return false;
     if (sourcesStatus) {
-      const down = (sourcesStatus.sources || []).some((s) => s.etat === 'panne');
+      // Seules les sources qui alimentent l'écart doivent être disponibles :
+      // ESPN/SportScore servent au règlement des scores, pas aux alertes.
+      const down = (sourcesStatus.sources || []).some(
+        (s) => ['betfair', 'polymarket'].includes(s.nom) && s.etat === 'panne'
+      );
       if (down) return false;
     }
     return true;
@@ -121,9 +125,12 @@ export class TelegramAlerts {
 
     for (const card of ecarts) {
       if (!this.isEligible(card, sourcesStatus, nowMs)) continue;
-      const matchKey = [card.match?.home, card.match?.away].filter(Boolean).join('-');
-      const key = `${matchKey}::${card.marche}::${card.issue}`.toLocaleLowerCase('fr');
+      const matchKey = card.fixture_key || [card.match?.home, card.match?.away, card.match?.kickoff].filter(Boolean).join('-');
+      const signalKey = `${matchKey}::${card.marche || ''}::${card.issue || ''}`.toLocaleLowerCase('fr');
       for (const sub of active) {
+        // Anti-spam PAR ABONNÉ : un destinataire ne doit pas priver les autres
+        // de la même alerte.
+        const key = `${sub.telegram_user_id}|${signalKey}`;
         if (sent[key]) continue;
         const dailyKey = `${sub.telegram_user_id}|${day}`;
         const count = state.daily[dailyKey] || 0;
@@ -179,7 +186,7 @@ export class TelegramAlerts {
     if (!['/start', '/alertes', '/stop'].includes(command)) return { handled: false };
     const user = msg.from || {};
     const userId = String(user.id || '');
-    if (!userId) return { handled: true, error: 'utilisateur inconnu' };
+    if (!userId) return { handled: true, command, error: 'utilisateur inconnu' };
     const chatId = msg.chat?.id ?? userId;
 
     if (command === '/start') {

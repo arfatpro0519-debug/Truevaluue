@@ -225,7 +225,12 @@ export function createApp(sourcesOrCfg = null) {
         buildSignals({ scraper, polymarket, force: false, maxPmLookup: 28 }),
         buildConfigurations({ scraper, polymarket, force: false, maxPmLookup: 28 }),
       ]);
-      const ecarts = buildEcarts({ signals, configurations, showPmLinks: cfg.showPmLinks !== false }).ecarts;
+      const ecarts = buildEcarts({
+        signals,
+        configurations,
+        showPmLinks: cfg.showPmLinks !== false,
+        heartbeats: calibration.getSourceHeartbeats?.(),
+      }).ecarts;
       const sourcesStatus = buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore, calibration, gapStore });
       return await alerts.evaluateAndSend({ ecarts, sourcesStatus });
     } catch (err) {
@@ -294,7 +299,12 @@ export function createApp(sourcesOrCfg = null) {
   const sensitiveLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20 });
 
   app.use('/api', apiLimiter);
-  app.use(['/api/auth', '/api/billing', '/api/v2', '/api/calibration/sync', '/api/cron/sync'], sensitiveLimiter);
+  // Le webhook Telegram est exclu : ce sont des updates poussés par Telegram,
+  // pas des appels clients, et un 429 provoquerait des réessais inutiles.
+  app.use(
+    ['/api/auth', '/api/billing/checkout', '/api/v2', '/api/calibration/sync', '/api/cron/sync'],
+    sensitiveLimiter
+  );
 
   // Les routes /api/* historiques restent intactes mais sont marquées dépréciées (§2.7).
   app.use('/api', (req, res, next) => {
@@ -623,14 +633,26 @@ export function createApp(sourcesOrCfg = null) {
       return sendError(req, res, 401, 'Signature webhook invalide.');
     }
     const update = req.body || {};
+    // Le stockage Render n'a pas de disque persistant : toute mutation d'état
+    // (abonnement aux alertes, paiement) doit être poussée dans KV immédiatement.
+    const flushState = async () => {
+      if (!cloudflare.enabled) return;
+      try {
+        await cloudflare.flush(path.dirname(calibration.filePath));
+      } catch (err) {
+        console.error('Flush KV après webhook impossible:', err?.message || err);
+      }
+    };
     // Les commandes /start, /alertes et /stop fonctionnent même si les paiements sont
     // désactivés (PAYMENTS_ENABLED=0 par défaut).
     const command = await alerts.handleUpdate(update);
     if (command.handled) {
+      await flushState();
       return sendJson(req, res, 200, { ok: true, command: command.command || null, error: command.error || null });
     }
     if (!cfg.paymentsEnabled) {
-      return sendError(req, res, 410, 'Le paiement est actuellement désactivé.');
+      // Telegram attend un 200 pour tout update, même ignoré, sinon il réessaie.
+      return sendJson(req, res, 200, { ok: true, ignored: true, reason: 'paiements désactivés' });
     }
 
     if (update.pre_checkout_query && cfg.telegramBotToken) {
@@ -671,6 +693,7 @@ export function createApp(sourcesOrCfg = null) {
       }
     }
 
+    await flushState();
     return sendJson(req, res, 200, { ok: true });
   });
 
@@ -1222,7 +1245,13 @@ export function createApp(sourcesOrCfg = null) {
         req,
         res,
         200,
-        buildEcarts({ signals, configurations, type: String(req.query?.type || 'all'), showPmLinks: cfg.showPmLinks !== false })
+        buildEcarts({
+          signals,
+          configurations,
+          type: String(req.query?.type || 'all'),
+          showPmLinks: cfg.showPmLinks !== false,
+          heartbeats: calibration.getSourceHeartbeats?.(),
+        })
       );
     } catch (err) {
       console.error('Erreur /api/v2/ecarts:', err);
@@ -1239,6 +1268,7 @@ export function createApp(sourcesOrCfg = null) {
         configurations,
         gapStore,
         showPmLinks: cfg.showPmLinks !== false,
+        heartbeats: calibration.getSourceHeartbeats?.(),
       });
       if (!detail) return sendError(req, res, 404, 'Écart introuvable.');
       return sendJson(req, res, 200, detail);
@@ -1271,12 +1301,18 @@ export function createApp(sourcesOrCfg = null) {
   app.get('/api/v2/laboratoire', async (req, res) => {
     try {
       const configurations = await v2Configurations();
-      const report = calibration.report({ limit: 500, minN: cfg.calibrationMinN });
+      const report = calibration.report({ limit: 5000, minN: cfg.calibrationMinN });
       return sendJson(
         req,
         res,
         200,
-        buildLaboratoire({ configurations, calibrationReport: report, intensity: req.query?.intensity })
+        buildLaboratoire({
+          configurations,
+          calibrationReport: report,
+          intensity: req.query?.intensity,
+          minSample: cfg.calibrationMinN,
+          observations_tronquees: report.summary?.total_observations > report.observations.length,
+        })
       );
     } catch (err) {
       console.error('Erreur /api/v2/laboratoire:', err);
@@ -1288,11 +1324,12 @@ export function createApp(sourcesOrCfg = null) {
   app.get('/api/v2/laboratoire/configuration', async (req, res) => {
     try {
       const configurations = await v2Configurations();
-      const report = calibration.report({ limit: 500, minN: cfg.calibrationMinN });
+      const report = calibration.report({ limit: 5000, minN: cfg.calibrationMinN });
       const detail = buildConfigurationDetail({
         code: req.query?.code,
         configurations,
         calibrationReport: report,
+        minSample: cfg.calibrationMinN,
       });
       if (!detail) return sendError(req, res, 404, 'Configuration introuvable.');
       return sendJson(req, res, 200, detail);

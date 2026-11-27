@@ -292,6 +292,8 @@ function summarizeMarketAxis(marketKey, bfRow, pmMarket, thresholds) {
       shape: def.shape,
       source_bf: Boolean(bfRow),
       source_pm: pmOuts.length > 0,
+      bf_age_seconds: numOrNull(bfRow?.age_seconds),
+      pm_age_seconds: numOrNull(pmMarket?.age_seconds),
       volume_bf: bfRow?.total_volume ?? 0,
       liquidity_pm: numOrNull(pmMarket?.liquidity),
       overround_pct: null,
@@ -447,6 +449,8 @@ function summarizeMarketAxis(marketKey, bfRow, pmMarket, thresholds) {
     shape: def.shape,
     source_bf: Boolean(bfStruct),
     source_pm: Boolean(pmMap),
+    bf_age_seconds: numOrNull(bfRow?.age_seconds),
+    pm_age_seconds: numOrNull(pmMarket?.age_seconds),
     volume_bf: bfRow?.total_volume ?? 0,
     liquidity_pm: numOrNull(pmMarket?.liquidity),
     pm_spread_pts: numOrNull(pmMarket?.spread) !== null ? round1(pmMarket.spread * 100.0) : null,
@@ -772,6 +776,9 @@ export function analyzeFixtureConfiguration(
   const th = resolveConfigThresholds(thresholds);
   const bfMarkets = fixture?.bf_markets || {};
   const pmMarkets = quote?.markets || {};
+  const quoteAgeSeconds = Number.isFinite(quote?.fetched_at)
+    ? Math.max(0, Math.floor((nowMs - quote.fetched_at) / 1000))
+    : null;
 
   const marketSnaps = {};
   const availableMarkets = [];
@@ -781,6 +788,7 @@ export function analyzeFixtureConfiguration(
     if (!bfRow && !pmMkt) continue;
     const snap = summarizeMarketAxis(mKey, bfRow, pmMkt, th);
     if (snap) {
+      snap.pm_age_seconds = quoteAgeSeconds;
       marketSnaps[mKey] = snap;
       availableMarkets.push(snap);
     }

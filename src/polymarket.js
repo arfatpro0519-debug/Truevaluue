@@ -1784,7 +1784,10 @@ export class PolymarketBook {
       if (res.ok) {
         const ts = Date.now();
         this._pruneCache(ts);
-        this.cache.set(key, { at: ts, quote: res.quote });
+        const quote = res.quote && typeof res.quote === 'object' && !Array.isArray(res.quote)
+          ? { ...res.quote, fetched_at: ts }
+          : res.quote;
+        this.cache.set(key, { at: ts, quote });
       }
       return res;
     })();

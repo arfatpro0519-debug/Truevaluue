@@ -28,6 +28,7 @@ export const state = {
   query: '',
   intensity: 'all',
   configCode: null,
+  originTab: 'ec',
   data: { ec: null, bi: null, ma: null, lb: null, cf: null, sources: null },
   loading: false,
   error: null,

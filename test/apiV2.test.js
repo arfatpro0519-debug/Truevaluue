@@ -273,6 +273,82 @@ test('Laboratoire : les signatures réglées historiques apparaissent même si e
   assert.deepEqual(lab.signatures[0].ic95_pct[0] < 50, true);
 });
 
+test('Laboratoire : un match avec plusieurs marchés réglés compte pour un seul', () => {
+  const report = {
+    observations: [
+      { fixture_key: 'x', signature_code: '1 | Oui | X | G2', status: 'settled', date: '2026-11-24', market: '1x2', bf_top_won: true, sides: [{ label: '1', bf_pct: 60 }] },
+      { fixture_key: 'x', signature_code: '1 | Oui | X | G2', status: 'settled', date: '2026-11-24', market: 'btts', bf_top_won: false, sides: [{ label: 'Oui', bf_pct: 55 }] },
+    ],
+  };
+  const lab = buildLaboratoire({ configurations: { catalog_72: [], partial_signatures: [] }, calibrationReport: report });
+  assert.equal(lab.signatures.length, 1);
+  assert.equal(lab.signatures[0].n_matchs, 1);
+  assert.equal(lab.signatures[0].n_observations, 2);
+  assert.equal(lab.signatures[0].k_favori_gagnant, 1);
+  assert.equal(lab.signatures[0].probabilite_marche_pct, 60);
+});
+
+test('Laboratoire : le filtre d’intensité gère les libellés accentués', () => {
+  const configurations = {
+    catalog_72: [{ code: '1 | Oui | X | G2', count: 2, dominant_intensity: 'Équilibre' }],
+    partial_signatures: [],
+  };
+  const lab = buildLaboratoire({ configurations, calibrationReport: { observations: [] }, intensity: 'equilibre' });
+  assert.equal(lab.signatures.length, 1);
+  assert.equal(lab.signatures[0].code, '1 | Oui | X | G2');
+});
+
+test('Laboratoire : intensité déduite des cotes pour les signatures historiques', () => {
+  const thresholds = { equilibreMaxPp: 4, faibleMaxPp: 12, modereeMaxPp: 24, forteMaxPp: 40 };
+  const report = {
+    observations: [
+      { signature_code: '1 | Oui | X | G2', status: 'settled', date: '2026-11-24', market: '1x2', bf_top_won: true, sides: [{ label: '1', bf_pct: 62 }, { label: '2', bf_pct: 42 }] },
+    ],
+  };
+  const configurations = { catalog_72: [], partial_signatures: [], thresholds };
+  const all = buildLaboratoire({ configurations, calibrationReport: report });
+  assert.equal(all.signatures[0].intensite_dominante, 'Modérée');
+  const filtered = buildLaboratoire({ configurations, calibrationReport: report, intensity: 'moderee' });
+  assert.equal(filtered.signatures.length, 1);
+  assert.equal(buildLaboratoire({ configurations, calibrationReport: report, intensity: 'forte' }).signatures.length, 0);
+});
+
+test('Configuration : un match nul est bien « Nul » et les codes sans espaces sont normalisés', () => {
+  const code = '1 | Oui | X | G2';
+  const report = {
+    observations: [
+      { signature_code: '1|Oui|X|G2', status: 'settled', date: '2026-11-24', home: 'A', away: 'B', market: '1x2', home_score: 1, away_score: 1, bf_top_won: false, sides: [{ label: 'N', bf_pct: 40 }, { label: '1', bf_pct: 35 }] },
+    ],
+  };
+  const d = buildConfigurationDetail({ code: '1|Oui|X|G2', configurations: {}, calibrationReport: report });
+  assert.equal(d.code, code);
+  assert.equal(d.complet, true);
+  assert.ok(d.explication.includes('Les quatre blocs sont renseignés'));
+  assert.equal(d.kpi.n_matchs_regles, 1);
+  assert.equal(d.matchs.length, 1);
+  const nul = d.marches.find((m) => m.marche === '1x2').issues.find((i) => i.issue === 'N');
+  assert.ok(nul);
+  assert.equal(nul.libelle, 'Nul');
+  assert.equal(nul.n_observations, 1);
+});
+
+test('Écarts : la fraîcheur des cartes vient des âges de marché ou des heartbeats persistés', () => {
+  const signals = { all_signals: [{ id: 'a-b::1x2::1', fixture_key: 'a-b', category: 'net', market: '1x2', side_label: '1' }] };
+  const base = { rows: [{ fixture_key: 'a-b', home: 'A', away: 'B', markets: [{ source_bf: true, source_pm: true }] }] };
+  const now = Date.now();
+  const withAges = buildEcarts({
+    signals,
+    configurations: { rows: [{ ...base.rows[0], markets: [{ source_bf: true, bf_age_seconds: 30, source_pm: true, pm_age_seconds: 45 }] }] },
+  });
+  assert.equal(withAges.ecarts[0].fraicheur.betfair_age_s, 30);
+  assert.equal(withAges.ecarts[0].fraicheur.polymarket_age_s, 45);
+  assert.equal(withAges.ecarts[0].fixture_key, 'a-b');
+
+  const withHeartbeats = buildEcarts({ signals, configurations: base, heartbeats: { betfair: now - 12_000, polymarket: now - 21_000 } });
+  assert.ok(withHeartbeats.ecarts[0].fraicheur.betfair_age_s >= 11);
+  assert.ok(withHeartbeats.ecarts[0].fraicheur.polymarket_age_s >= 20);
+});
+
 test('Configuration : fiche avec paramètres, explication, matchs et KPI', () => {
   const code = '1 | Oui | X | G2';
   const configurations = {

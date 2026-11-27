@@ -1895,7 +1895,7 @@ export class CalibrationStore {
     nowMs = Date.now(),
     minN = DEFAULT_CALIBRATION_MIN_N,
   } = {}) {
-    const safeLimit = Math.min(500, Math.max(1, Number.parseInt(String(limit), 10) || 200));
+    const safeLimit = Math.min(5000, Math.max(1, Number.parseInt(String(limit), 10) || 200));
     const safeOffset = Math.max(0, Number.parseInt(String(offset), 10) || 0);
     const baseEnrichedObs = this.observations.map((o) => enrichObservationResult(o, nowMs));
     const obsByFixture = this._obsByFixtureMap(baseEnrichedObs, nowMs);

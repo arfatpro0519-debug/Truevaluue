@@ -10,6 +10,10 @@ export function f1(value) {
     : '—';
 }
 
+export function pct(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${f1(value)} %` : '—';
+}
+
 export function int(value) {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.round(value).toLocaleString('fr-FR')

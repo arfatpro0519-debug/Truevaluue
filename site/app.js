@@ -49,8 +49,9 @@ function view() {
 
 function render() {
   document.getElementById('app').innerHTML = view();
+  const activeTab = ['lb', 'cf'].includes(state.tab) ? state.originTab : state.tab;
   document.querySelectorAll('#nv button').forEach((b) => {
-    b.classList.toggle('on', b.dataset.tab === (state.tab === 'lb' ? 'ec' : state.tab));
+    b.classList.toggle('on', b.dataset.tab === activeTab);
   });
 }
 
@@ -85,6 +86,9 @@ async function load() {
 }
 
 function go(tab) {
+  if (['lb', 'cf'].includes(tab) && !['lb', 'cf'].includes(state.tab)) {
+    state.originTab = state.tab;
+  }
   state.tab = tab;
   window.scrollTo(0, 0);
   load();
@@ -176,14 +180,9 @@ document.addEventListener('click', async (e) => {
   if (b.dataset.retryDetail && currentDetail) return openDetail(currentDetail.id);
   if (b.dataset.id) return openDetail(b.dataset.id);
   if (b.dataset.follow) {
+    // Le suivi local d'un match n'a pas d'effet sur les alertes globales :
+    // celles-ci se gèrent uniquement depuis la feuille « Gérer mes alertes ».
     const on = toggleFollow(b.dataset.follow);
-    if (state.isTelegram) {
-      try {
-        await api.setAlertes(on);
-      } catch (err) {
-        toast(err.message);
-      }
-    }
     toast(on ? 'Suivi activé.' : 'Suivi désactivé.');
     if (currentDetail) openSheet(renderDetail(currentDetail));
     return render();
