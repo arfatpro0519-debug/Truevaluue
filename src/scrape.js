@@ -249,13 +249,21 @@ export class Scraper {
         if (!entry) {
           return this.degraded(key, 'réponse 304 sans copie locale');
         }
+        // Un 304 confirme que la ressource n'a pas changé : l'âge des données
+        // reste celui de la dernière payload reçue, pas celui de la revalidation.
+        const updatedMs =
+          typeof entry.dataUpdatedAt === 'string'
+            ? Date.parse(entry.dataUpdatedAt)
+            : Number(entry.dataUpdatedAt);
+        const baseMs = Number.isFinite(updatedMs) && updatedMs > 0 ? updatedMs : entry.fetchedAtMs;
+        const ageSeconds = Math.max(0, Math.floor((Date.now() - baseMs) / 1000));
         entry.fetchedAtMs = Date.now();
         if (reply.etag) entry.etag = reply.etag;
         if (reply.lastModified) entry.lastModified = reply.lastModified;
         return {
           rows: entry.rows,
           source: Source.Cache,
-          ageSeconds: 0,
+          ageSeconds,
           dataUpdatedAt: entry.dataUpdatedAt,
           error: null,
         };

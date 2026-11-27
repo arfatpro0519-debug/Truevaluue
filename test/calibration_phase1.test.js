@@ -225,6 +225,32 @@ test('1.6 la signature du signal est attachée à l’observation', () => {
   });
 });
 
+test('1.6 la signature est figée au premier relevé, même si le code live change ensuite', () => {
+  const obs = observation('match_sig2', { score: [2, 0], odds: 2 });
+  delete obs.recommendation;
+  withStore([obs], (store) => {
+    const signal = (code) => ({
+      all_signals: [
+        {
+          id: 'exec::match_sig2::1x2::1',
+          fixture_key: 'match_sig2',
+          category: 'executable',
+          date: '2026-11-25T20:00:00Z',
+          side_label: '1',
+          market: '1x2',
+          signature_code: code,
+          signature_complete: true,
+        },
+      ],
+    });
+    store.recordFromSignals(signal('1|Non|1|G2'), Date.parse('2026-11-24T12:00:00Z'));
+    store.recordFromSignals(signal('2|Oui|1|G3'), Date.parse('2026-11-24T13:00:00Z'));
+    const updated = store.observations.find((o) => o.fixture_key === 'match_sig2');
+    assert.equal(updated.signature_code, '1|Non|1|G2');
+    store.close();
+  });
+});
+
 test('1.6 la calibration par signature lit les observations, pas les matchs live', () => {
   const code = ALL_72_SIGNATURES[0].code;
   const report = {

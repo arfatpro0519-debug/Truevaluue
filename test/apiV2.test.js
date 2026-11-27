@@ -311,6 +311,15 @@ test('Laboratoire : intensité déduite des cotes pour les signatures historique
   const filtered = buildLaboratoire({ configurations, calibrationReport: report, intensity: 'moderee' });
   assert.equal(filtered.signatures.length, 1);
   assert.equal(buildLaboratoire({ configurations, calibrationReport: report, intensity: 'forte' }).signatures.length, 0);
+
+  // Borne exacte : le moteur live utilise un seuil strict (<), pas <=.
+  const limite = {
+    ...report,
+    observations: [
+      { signature_code: '1 | Oui | X | G2', status: 'settled', date: '2026-11-24', market: '1x2', bf_top_won: true, sides: [{ label: '1', bf_pct: 50 }, { label: '2', bf_pct: 46 }] },
+    ],
+  };
+  assert.equal(buildLaboratoire({ configurations, calibrationReport: limite }).signatures[0].intensite_dominante, 'Faible');
 });
 
 test('Configuration : un match nul est bien « Nul » et les codes sans espaces sont normalisés', () => {

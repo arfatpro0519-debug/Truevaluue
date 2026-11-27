@@ -1324,8 +1324,14 @@ export class CalibrationStore {
         typeof sig.signature_complete === 'boolean'
           ? sig.signature_complete
           : obs.signature_complete ?? null;
-      if (obs.signature_code !== code || obs.signature_complete !== complete) {
+      // Écriture une seule fois : la signature doit décrire les cotes figées
+      // lors du premier relevé (first_seen), pas un code calculé plus tard sur
+      // des cotes différentes. Ne jamais écraser un code déjà enregistré.
+      if (obs.signature_code == null && code != null) {
         obs.signature_code = code;
+        changed = true;
+      }
+      if (obs.signature_complete == null && complete != null) {
         obs.signature_complete = complete;
         changed = true;
       }

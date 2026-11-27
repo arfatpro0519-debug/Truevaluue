@@ -37,10 +37,11 @@ function intensityFromObservation(obs, thresholds = {}) {
   if (sides.length < 2) return null;
   const margin = round1(sides[0].bf_pct - sides[1].bf_pct);
   if (margin === null) return null;
-  if (margin <= (Number(thresholds.equilibreMaxPp) || 4)) return 'equilibre';
-  if (margin <= (Number(thresholds.faibleMaxPp) || 12)) return 'faible';
-  if (margin <= (Number(thresholds.modereeMaxPp) || 24)) return 'moderee';
-  if (margin <= (Number(thresholds.forteMaxPp) || 40)) return 'forte';
+  // Mêmes seuils stricts que classifyIntensity() dans configurations.js.
+  if (margin < (Number(thresholds.equilibreMaxPp) || 4)) return 'equilibre';
+  if (margin < (Number(thresholds.faibleMaxPp) || 12)) return 'faible';
+  if (margin < (Number(thresholds.modereeMaxPp) || 24)) return 'moderee';
+  if (margin < (Number(thresholds.forteMaxPp) || 40)) return 'forte';
   return 'extreme';
 }
 

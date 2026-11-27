@@ -86,6 +86,8 @@ test('Scraper handles live fetch, fresh cache, and 304 revalidation', async () =
   const forced = await scraper.fetch('1x2', true);
   assert.equal(forced.source, Source.Cache);
   assert.equal(calls, 2);
+  // Un 304 ne rend pas la payload fraîche : l'âge reste celui des données.
+  assert.ok(forced.ageSeconds > 0);
 });
 
 test('enrich normalizes 1X2, two-way, and multi Arbworld rows without signal scoring', () => {

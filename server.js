@@ -984,6 +984,7 @@ export function createApp(sourcesOrCfg = null) {
         { slug: 'greek-super-league-2', name: 'Super League 2 (Grèce)' },
         { slug: 'elite-league-u20', name: 'Elite League U20' },
         { slug: 'international-friendly', name: 'Amicaux internationaux' },
+        { slug: 'bulgarian-first-league', name: 'Première ligue bulgare' },
       ],
     });
   });
