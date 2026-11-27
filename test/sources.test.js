@@ -152,6 +152,42 @@ test('team normalization and kickoff parsing work cleanly', () => {
   assert.ok(similarity('Manchester United', 'Man Utd') > 0.55);
 });
 
+test('résultats : ligues supplémentaires couvertes et alias d’équipes', () => {
+  assert.equal(slugForCompetition('Greek Super League'), 'gre.1');
+  assert.equal(slugForCompetition('Greek Super League 2'), null); // SportScore
+  assert.equal(slugForCompetition('Bolivian Liga de Futbol Profesional'), 'bol.1');
+  assert.equal(slugForCompetition('Portuguese Cup'), 'por.taca.portugal');
+  assert.equal(slugForCompetition('Saudi Pro League'), 'ksa.1');
+  assert.equal(slugForCompetition('Polish Ekstraklasa'), null); // aucune ligue ESPN correspondante
+  assert.equal(slugForCompetition('Korean K League'), null);
+  assert.deepEqual(competitionSlugs('Bulgarian A League'), ['bulgarian-first-league']);
+  assert.deepEqual(competitionSlugs('Bulgarian First League'), ['bulgarian-first-league']);
+
+  assert.equal(similarity('Inter', 'Internazionale'), 1);
+  assert.equal(similarity('PSV', 'PSV Eindhoven'), 1);
+  assert.equal(similarity('LDU', 'Liga de Quito'), 1);
+  assert.equal(similarity('Hull', 'Hull City'), 1);
+  assert.equal(similarity('Brighton', 'Brighton & Hove Albion'), 1);
+  assert.equal(similarity('Oud-Heverlee Leuven', 'OH Leuven'), 1);
+  assert.equal(similarity('Paris St-G', 'Paris Saint-Germain'), 1);
+
+  const events = [
+    {
+      id: 'e1',
+      date: '2026-11-22T19:45Z',
+      league_slug: 'ita.1',
+      home_team: 'Atalanta',
+      away_team: 'Internazionale',
+      home_score: 1,
+      away_score: 2,
+      state: 'FINISHED',
+    },
+  ];
+  const found = findEspnMatch('Atalanta', 'Inter', '2026-11-22 19:45:00', 'ita.1', events);
+  assert.ok(found);
+  assert.equal(found.away_score, 2);
+});
+
 test('Polymarket multi-market parsing and event matching', () => {
   const kickoff = parseKickoff('2026-11-22T19:00:00Z');
   assert.equal(

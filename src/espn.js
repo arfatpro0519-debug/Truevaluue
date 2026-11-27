@@ -61,15 +61,18 @@ export const LEAGUES = [
   { slug: 'usa.1', name: 'Major League Soccer (MLS)', flag: '🇺🇸', category: 'OTHER' },
   { slug: 'aus.1', name: 'A-League Men', flag: '🇦🇺', category: 'OTHER' },
   { slug: 'jpn.1', name: 'J1 League', flag: '🇯🇵', category: 'OTHER' },
-  { slug: 'kor.1', name: 'K League 1', flag: '🇰🇷', category: 'OTHER' },
+
   { slug: 'swe.1', name: 'Allsvenskan', flag: '🇸🇪', category: 'OTHER' },
   { slug: 'nor.1', name: 'Eliteserien', flag: '🇳🇴', category: 'OTHER' },
   { slug: 'sui.1', name: 'Super League suisse', flag: '🇨🇭', category: 'OTHER' },
   { slug: 'aut.1', name: 'Bundesliga autrichienne', flag: '🇦🇹', category: 'OTHER' },
-  { slug: 'pol.1', name: 'Ekstraklasa', flag: '🇵🇱', category: 'OTHER' },
+
   { slug: 'rou.1', name: 'Liga I roumaine', flag: '🇷🇴', category: 'OTHER' },
-  { slug: 'sau.1', name: 'Saudi Pro League', flag: '🇸🇦', category: 'OTHER' },
+  { slug: 'ksa.1', name: 'Saudi Pro League', flag: '🇸🇦', category: 'OTHER' },
   { slug: 'chn.1', name: 'Chinese Super League', flag: '🇨🇳', category: 'OTHER' },
+  { slug: 'gre.1', name: 'Super League grecque', flag: '🇬🇷', category: 'OTHER' },
+  { slug: 'bol.1', name: 'Liga de Fútbol Profesional bolivienne', flag: '🇧🇴', category: 'OTHER' },
+  { slug: 'por.taca.portugal', name: 'Coupe du Portugal', flag: '🇵🇹', category: 'OTHER' },
 ];
 
 export const VALID_LEAGUE_SLUGS = new Set(LEAGUES.map((l) => l.slug));
@@ -77,6 +80,11 @@ export const VALID_LEAGUE_SLUGS = new Set(LEAGUES.map((l) => l.slug));
 const LEAGUE_NAME_BY_SLUG = new Map(LEAGUES.map((l) => [l.slug, l.name]));
 
 const COMPETITION_SLUGS = [
+  ['greek super league', 'gre.1'],
+  ['bolivian liga de futbol profesional', 'bol.1'],
+  ['bolivian primera', 'bol.1'],
+  ['portuguese cup', 'por.taca.portugal'],
+  ['taca de portugal', 'por.taca.portugal'],
   ['concacaf nations league', 'concacaf.nations.league'],
   ['cup of nations qualif', 'caf.nations_qual'],
   ["women's champions league", 'uefa.wchampions'],
@@ -113,19 +121,17 @@ const COMPETITION_SLUGS = [
   ['a-league', 'aus.1'],
   ['japanese j league', 'jpn.1'],
   ['j1 league', 'jpn.1'],
-  ['korean k league', 'kor.1'],
-  ['k league 1', 'kor.1'],
+
   ['swedish allsvenskan', 'swe.1'],
   ['allsvenskan', 'swe.1'],
   ['norwegian eliteserien', 'nor.1'],
   ['eliteserien', 'nor.1'],
   ['swiss super league', 'sui.1'],
   ['austrian bundesliga', 'aut.1'],
-  ['polish ekstraklasa', 'pol.1'],
-  ['ekstraklasa', 'pol.1'],
+
   ['romanian liga', 'rou.1'],
-  ['saudi pro league', 'sau.1'],
-  ['saudi premier league', 'sau.1'],
+  ['saudi pro league', 'ksa.1'],
+  ['saudi premier league', 'ksa.1'],
   ['chinese super league', 'chn.1'],
 ];
 
@@ -168,6 +174,8 @@ const FOREIGN_COMPETITION_QUALIFIERS = [
 
 export function slugForCompetition(name) {
   const n = String(name || '').toLowerCase().trim();
+  // « Greek Super League 2 » est couverte par SportScore, pas par ESPN.
+  if (n.includes('greek super league 2')) return null;
 
   for (const [needle, slug] of COMPETITION_SLUGS) {
     if (n.includes(needle)) return slug;

@@ -314,6 +314,18 @@ const ALIAS_TOKENS = {
   int: 'internazionale',
 };
 
+// Alias de noms complets (après normalisation) pour apparier les flux de cotes
+// avec les scoreboards ESPN : « Inter » = Internazionale, « PSV » = PSV Eindhoven…
+const TEAM_ALIASES = {
+  inter: 'internazionale',
+  psv: 'psveindhoven',
+  ldu: 'ligaquito',
+  hull: 'hullcity',
+  brighton: 'brightonhovealbion',
+  oudheverleeleuven: 'ohleuven',
+  parisstg: 'parissaintgermain',
+};
+
 function isAlnumAscii(ch) {
   const code = ch.charCodeAt(0);
   return (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
@@ -339,7 +351,8 @@ export function normalizeTeam(name) {
     .map((tok) => ALIAS_TOKENS[tok] || tok)
     .join('');
 
-  return cleaned || out.replace(/[^a-z0-9]/g, '');
+  const normalized = cleaned || out.replace(/[^a-z0-9]/g, '');
+  return TEAM_ALIASES[normalized] || normalized;
 }
 
 export function fixtureKey(home, away) {

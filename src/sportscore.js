@@ -18,6 +18,9 @@ export function competitionSlugs(name) {
   if ((n.includes('greek') || n.includes('greece')) && n.includes('super league 2')) {
     return ['greek-super-league-2'];
   }
+  if (n.includes('bulgarian') && (n.includes('first league') || n.includes('a league'))) {
+    return ['bulgarian-first-league'];
+  }
   if (n.includes('elite league') && n.includes('u20')) {
     return ['elite-league-u20'];
   }
