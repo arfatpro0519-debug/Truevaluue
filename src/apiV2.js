@@ -614,6 +614,15 @@ function newestCacheAge(cache) {
   return newest;
 }
 
+// Repli après redémarrage : le cache HTTP est en mémoire, mais la dernière
+// collecte réussie est conservée dans store-meta.json (Cloudflare KV).
+function heartbeatAge(calibration, name) {
+  const beats = calibration?.getSourceHeartbeats?.() || {};
+  const at = beats?.[name];
+  if (!Number.isFinite(at)) return null;
+  return Math.max(0, Math.floor((Date.now() - at) / 1000));
+}
+
 export function buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore, calibration, gapStore } = {}) {
   const staleSecs = Number.isFinite(cfg?.sourceStaleSecs) ? cfg.sourceStaleSecs : 600;
   const mk = (nom, age, detail = null) => ({
@@ -627,11 +636,15 @@ export function buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore,
     const c = typeof scraper?.cached === 'function' ? scraper.cached(key) : null;
     if (c && Number.isFinite(c.ageSeconds)) bfAges.push(c.ageSeconds);
   }
+  const bfAge = bfAges.length ? Math.min(...bfAges) : heartbeatAge(calibration, 'betfair');
+  const pmAge = newestCacheAge(polymarket?.cache) ?? heartbeatAge(calibration, 'polymarket');
+  const espnAge = newestCacheAge(espn?.cache) ?? heartbeatAge(calibration, 'espn');
+  const ssAge = newestCacheAge(sportscore?.cache) ?? heartbeatAge(calibration, 'sportscore');
   const sources = [
-    mk('betfair', bfAges.length ? Math.min(...bfAges) : null, bfAges.length ? null : 'aucune donnée en cache'),
-    mk('polymarket', newestCacheAge(polymarket?.cache), cfg?.polymarketEnabled === false ? 'source désactivée' : null),
-    mk('espn', newestCacheAge(espn?.cache), cfg?.espnEnabled === false ? 'source désactivée' : null),
-    mk('sportscore', newestCacheAge(sportscore?.cache), cfg?.sportscoreDisabled ? 'source désactivée' : null),
+    mk('betfair', bfAge, bfAge === null ? 'aucune donnée en cache' : null),
+    mk('polymarket', pmAge, cfg?.polymarketEnabled === false ? 'source désactivée' : null),
+    mk('espn', espnAge, cfg?.espnEnabled === false ? 'source désactivée' : null),
+    mk('sportscore', ssAge, cfg?.sportscoreDisabled ? 'source désactivée' : null),
   ];
   return {
     ok: true,
@@ -655,11 +668,12 @@ export function buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore,
 export function recordGapSnapshots(sources, rows) {
   const store = sources?.gapStore;
   if (!store) return 0;
-  let count = 0;
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const compared = { fixture_key: row?.fixture_key, markets: row?.markets || [] };
-    count += store.recordCompared(compared);
-  }
+  const list = Array.isArray(rows) ? rows : [];
+  const comparedList = list.map((row) => ({ fixture_key: row?.fixture_key, markets: row?.markets || [] }));
+  const count =
+    typeof store.recordBatch === 'function'
+      ? store.recordBatch(comparedList)
+      : comparedList.reduce((n, compared) => n + store.recordCompared(compared), 0);
   store.purge();
   return count;
 }

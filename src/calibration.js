@@ -970,6 +970,16 @@ export class CalibrationStore {
     };
   }
 
+  // Dernière collecte réussie par source (epoch ms), persistée dans store-meta.json
+  // pour rester visible après un redémarrage (les caches HTTP sont en mémoire).
+  getSourceHeartbeats() {
+    return this.subscriptions.getSourceHeartbeats();
+  }
+
+  recordSourceHeartbeats(heartbeats) {
+    return this.subscriptions.setSourceHeartbeats(heartbeats);
+  }
+
   _writeJson(targetPath, value, operation = 'write_json') {
     try {
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });

@@ -27,12 +27,29 @@ export class SubscriptionStore {
       settings: meta?.settings && typeof meta.settings === 'object' ? meta.settings : {},
       subscriptions:
         meta?.subscriptions && typeof meta.subscriptions === 'object' ? meta.subscriptions : {},
+      source_heartbeats:
+        meta?.source_heartbeats && typeof meta.source_heartbeats === 'object'
+          ? meta.source_heartbeats
+          : {},
     };
     return this._metaCache;
   }
 
   _writeMeta() {
     return this._writeJson(this.metaFilePath, this._readMeta(), 'write_meta');
+  }
+
+  getSourceHeartbeats() {
+    return { ...this._readMeta().source_heartbeats };
+  }
+
+  setSourceHeartbeats(heartbeats) {
+    const clean = {};
+    for (const [name, at] of Object.entries(heartbeats || {})) {
+      if (Number.isFinite(at)) clean[String(name)] = Number(at);
+    }
+    this._readMeta().source_heartbeats = clean;
+    return this._writeMeta();
   }
 
   getSetting(key) {

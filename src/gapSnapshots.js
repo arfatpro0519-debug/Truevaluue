@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_RETENTION_DAYS = 7;
+// Garde-fou mémoire : au-delà, on ne conserve que les points les plus récents.
+const MAX_ROWS = 120_000;
 
 function numOrNull(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -45,7 +47,47 @@ export class GapSnapshotsStore {
       }
     }
     this.rows = this._load();
+    this.lastByKey = new Map();
     this.purge();
+    this._rebuildIndex();
+  }
+
+  _keyOf(row) {
+    return `${row.fixture_key}\u0000${row.market}\u0000${row.side}`;
+  }
+
+  _rebuildIndex() {
+    this.lastByKey = new Map();
+    for (const row of this.rows) this._remember(row);
+  }
+
+  _remember(row) {
+    const key = this._keyOf(row);
+    const prev = this.lastByKey.get(key);
+    if (!prev || String(prev.ts) <= String(row.ts)) {
+      this.lastByKey.set(key, { ts: row.ts, bf_pct: row.bf_pct, pm_pct: row.pm_pct });
+    }
+  }
+
+  // Ajout en mémoire uniquement : l'écriture disque est faite une seule fois
+  // par lot (sinon chaque point réécrit tout le fichier et fait exploser la mémoire).
+  _appendRow(row) {
+    if (this.db) {
+      try {
+        this.db
+          .prepare(
+            'INSERT INTO gap_snapshots (fixture_key, market, side, ts, bf_pct, pm_pct) VALUES (?, ?, ?, ?, ?, ?)'
+          )
+          .run(row.fixture_key, row.market, row.side, row.ts, row.bf_pct, row.pm_pct);
+        this.reportError(true, 'gap_write');
+      } catch (err) {
+        this.reportError(false, 'gap_write', err);
+        return false;
+      }
+    }
+    this.rows.push(row);
+    this._remember(row);
+    return true;
   }
 
   _load() {
@@ -75,7 +117,7 @@ export class GapSnapshotsStore {
   _writeJson() {
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      fs.writeFileSync(this.filePath, `${JSON.stringify(this.rows, null, 2)}\n`, 'utf8');
+      fs.writeFileSync(this.filePath, `${JSON.stringify(this.rows)}\n`, 'utf8');
       this.reportError(true, 'gap_write_json');
     } catch (err) {
       this.reportError(false, 'gap_write_json', err);
@@ -94,40 +136,55 @@ export class GapSnapshotsStore {
     };
     if (!row.fixture_key || !row.market || !row.side) return null;
 
-    if (this.db) {
-      try {
-        this.db
-          .prepare(
-            'INSERT INTO gap_snapshots (fixture_key, market, side, ts, bf_pct, pm_pct) VALUES (?, ?, ?, ?, ?, ?)'
-          )
-          .run(row.fixture_key, row.market, row.side, row.ts, row.bf_pct, row.pm_pct);
-        this.reportError(true, 'gap_write');
-      } catch (err) {
-        this.reportError(false, 'gap_write', err);
-        return null;
-      }
-    }
-    this.rows.push(row);
+    if (!this._appendRow(row)) return null;
     if (!this.db) this._writeJson();
     return row;
   }
 
   // Enregistre un instantané pour chaque issue ayant deux probabilités réelles.
-  recordCompared(compared, now = new Date()) {
+  // Les valeurs inchangées depuis le dernier point sont ignorées (le flux reste
+  // lisible sans gonfler le fichier), et l'écriture disque est faite une seule fois.
+  _recordOne(compared, ts) {
     const fixtureKey = compared?.fixture_key;
     if (!fixtureKey) return 0;
-    const ts = (now instanceof Date ? now : new Date(now)).toISOString();
     let count = 0;
     for (const mkt of compared?.markets || []) {
       for (const side of mkt?.sides || []) {
         const bf = numOrNull(side.bf_pct);
         const pm = numOrNull(side.pm_norm_prob_pct ?? side.pm_pct);
         if (bf === null || pm === null) continue;
-        if (this.append({ fixture_key: fixtureKey, market: mkt.market, side: side.label, ts, bf_pct: bf, pm_pct: pm })) {
-          count += 1;
-        }
+        const row = {
+          fixture_key: String(fixtureKey),
+          market: String(mkt.market || ''),
+          side: String(side.label || ''),
+          ts,
+          bf_pct: bf,
+          pm_pct: pm,
+        };
+        if (!row.market || !row.side) continue;
+        const prev = this.lastByKey.get(this._keyOf(row));
+        if (prev && prev.bf_pct === bf && prev.pm_pct === pm) continue;
+        if (this._appendRow(row)) count += 1;
       }
     }
+    return count;
+  }
+
+  recordCompared(compared, now = new Date()) {
+    const ts = (now instanceof Date ? now : new Date(now)).toISOString();
+    const count = this._recordOne(compared, ts);
+    if (count > 0 && !this.db) this._writeJson();
+    return count;
+  }
+
+  // Lot complet d'une synchronisation : une seule écriture disque à la fin.
+  recordBatch(comparedList, now = new Date()) {
+    const ts = (now instanceof Date ? now : new Date(now)).toISOString();
+    let count = 0;
+    for (const compared of Array.isArray(comparedList) ? comparedList : []) {
+      count += this._recordOne(compared, ts);
+    }
+    if (count > 0 && !this.db) this._writeJson();
     return count;
   }
 
@@ -150,10 +207,16 @@ export class GapSnapshotsStore {
 
   purge(now = Date.now()) {
     const cutoff = now - this.retentionDays * 24 * 60 * 60 * 1000;
-    const kept = this.rows.filter((r) => {
+    let kept = this.rows.filter((r) => {
       const t = Date.parse(r.ts);
       return Number.isFinite(t) && t >= cutoff;
     });
+    if (kept.length > MAX_ROWS) {
+      kept = kept
+        .slice()
+        .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+        .slice(-MAX_ROWS);
+    }
     const removed = this.rows.length - kept.length;
     if (removed === 0) return 0;
     if (this.db) {
@@ -167,6 +230,7 @@ export class GapSnapshotsStore {
       }
     }
     this.rows = kept;
+    this._rebuildIndex();
     if (!this.db) this._writeJson();
     return removed;
   }

@@ -245,6 +245,16 @@ export function createApp(sourcesOrCfg = null) {
     const recorded = calibration.recordFromComparison(cmpResult.rows);
     const recordedSignals = calibration.recordFromSignals(sigResult);
     const settlement = await calibration.settle({ espn, sportscore, cfg });
+    // Mémorise la fraîcheur réelle de chaque source avant le tick d'alertes :
+    // les caches HTTP sont perdus à chaque redémarrage Render.
+    const sourceStatus = buildSourcesStatus({ cfg, scraper, polymarket, espn, sportscore, calibration, gapStore });
+    const heartbeats = {};
+    for (const source of sourceStatus.sources) {
+      if (Number.isFinite(source.age_s)) {
+        heartbeats[source.nom] = Date.now() - source.age_s * 1000;
+      }
+    }
+    if (Object.keys(heartbeats).length) calibration.recordSourceHeartbeats(heartbeats);
     const alertes = await runAlertTick();
     const stockage = await cloudflare.flush(path.dirname(calibration.filePath));
     return {
